@@ -62,7 +62,7 @@ User ($0.05–$5.00 budget)
 
 | Agent | Port | Price | What it does |
 |-------|------|-------|-------------|
-| Web Search | 8001 | $0.0005 | Tavily-powered web search |
+| Web Search | 8001 | $0.0005 | DuckDuckGo-powered web search (free, no API key) |
 | Extractor | 8002 | $0.0005 | Pulls pricing, features, weaknesses from raw text |
 | Summarizer | 8003 | $0.001 | Condenses 3 loops of extractions into key findings |
 | **Analyst** | **8004** | **$0.002** | 5 actionable recommendations tailored to your company |
@@ -92,7 +92,8 @@ machine-readable, composable.
 ### Prerequisites
 ```bash
 pip install -r requirements.txt
-# Get API keys: GEMINI_API_KEY, TAVILY_API_KEY
+# Get API key: GEMINI_API_KEY
+# Web search runs on DuckDuckGo (free, no key required)
 # Copy .env.example to .env and fill in your keys
 cp .env.example .env
 ```

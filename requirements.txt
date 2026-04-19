@@ -4,6 +4,6 @@ httpx
 pydantic
 python-dotenv
 langgraph
-tavily-python
+duckduckgo-search
 circle-developer-controlled-wallets
 websockets
