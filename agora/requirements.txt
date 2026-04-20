@@ -7,3 +7,4 @@ langgraph
 duckduckgo-search
 circle-developer-controlled-wallets
 websockets
+web3

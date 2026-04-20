@@ -81,6 +81,7 @@ class TaskRequest(BaseModel):
     topic: str
     budget: float                  # user-set USDC budget, minimum $0.05
     task_type: str = "competitive_intelligence"
+    include_consultancy: bool = False
     company_context: dict = {
         "company_size": "startup",
         "stage": "seed",
@@ -107,11 +108,11 @@ async def run_task(request: TaskRequest):
     if request.budget < 0.05:
         return {"error": "Minimum budget is $0.05 USDC"}
 
-    gemini_key = os.getenv("GEMINI_API_KEY", "")
-    if not gemini_key or gemini_key == "your_gemini_api_key_here":
+    groq_key = os.getenv("GROQ_API_KEY", "")
+    if not groq_key or groq_key == "your_groq_api_key_here":
         return {
             "error": (
-                "GEMINI_API_KEY is not configured. "
+                "GROQ_API_KEY is not configured. "
                 "Set a valid key in .env before running the paid pipeline."
             )
         }
@@ -121,6 +122,7 @@ async def run_task(request: TaskRequest):
         user_budget=request.budget,
         company_context=request.company_context,
         task_type=request.task_type,
+        include_consultancy=request.include_consultancy,
         websocket_emit=broadcast
     )
     return result

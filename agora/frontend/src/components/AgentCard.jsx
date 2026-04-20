@@ -1,10 +1,10 @@
 import React from 'react'
 
 const STATUS_CONFIG = {
-  IDLE:    { label: 'Idle',    cls: 'status-idle',    icon: '○' },
-  WORKING: { label: 'Working', cls: 'status-working', icon: '◉' },
-  PAID:    { label: 'Paid',    cls: 'status-paid',    icon: '✓' },
-  FRAUD:   { label: 'Fraud',   cls: 'status-fraud',   icon: '✗' },
+  IDLE:    { label: 'IDLE',    cls: 'status-idle',    icon: '○' },
+  WORKING: { label: 'WORKING', cls: 'status-working', icon: '●●●' },
+  PAID:    { label: 'PAID',    cls: 'status-paid',    icon: '✓' },
+  FRAUD:   { label: 'FRAUD',   cls: 'status-fraud',   icon: '✗' },
   TIMEOUT: { label: 'Timeout', cls: 'status-timeout', icon: '!' },
 }
 
@@ -23,7 +23,7 @@ export default function AgentCard({ agent, state }) {
       </div>
 
       {state.amount && (
-        <div className="agent-amount">${state.amount} USDC</div>
+        <div className="agent-amount">${Number(state.amount).toFixed(4)} USDC</div>
       )}
 
       {state.txHash && (

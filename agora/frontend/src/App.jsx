@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import AgentCard from './components/AgentCard'
 import TransactionFeed from './components/TransactionFeed'
 import AuditLog from './components/AuditLog'
@@ -12,6 +12,7 @@ const AGENTS = [
   { key: 'summarizer', name: 'Summarizer Agent',  icon: '📝', port: 8003, price: '$0.001'  },
   { key: 'analyst',    name: 'Analyst Agent',     icon: '🧠', port: 8004, price: '$0.002'  },
   { key: 'formatter',  name: 'Formatter Agent',   icon: '✨', port: 8005, price: '$0.0005' },
+  { key: 'consultancy', name: 'Consultancy Agent', icon: '💼', port: 8006, price: '$0.0015' },
 ]
 
 const API_BASE = 'http://localhost:8000'
@@ -22,14 +23,22 @@ export default function App() {
   const [transactions, setTransactions]   = useState([])
   const [auditEntries, setAuditEntries]   = useState([])
   const [report, setReport]               = useState(null)
+  const [topic, setTopic]                 = useState('')
   const [txCount, setTxCount]             = useState(0)
   const [totalSpent, setTotalSpent]       = useState(0)
   const [alerts, setAlerts]               = useState([])
   const [running, setRunning]             = useState(false)
   const [wsConnected, setWsConnected]     = useState(false)
+  const [plannedLoops, setPlannedLoops]   = useState(0)
+  const [currentLoop, setCurrentLoop]     = useState(0)
+  const [fraudBanner, setFraudBanner]     = useState(null)
   const ws = useRef(null)
   const wsRetryDelay = useRef(2000)
   const wsRetryTimer = useRef(null)
+  const fraudTimer = useRef(null)
+
+  const progressPct = plannedLoops > 0 ? Math.min(100, Math.round((currentLoop / plannedLoops) * 100)) : 0
+  const mode = report ? 'complete' : running ? 'running' : 'landing'
 
   // ── WebSocket connection ───────────────────────────────────────────────────
   useEffect(() => {
@@ -71,6 +80,7 @@ export default function App() {
     connect()
     return () => {
       clearTimeout(wsRetryTimer.current)
+      clearTimeout(fraudTimer.current)
       clearInterval(ws.current?._ping)
       ws.current?.close()
     }
@@ -81,6 +91,9 @@ export default function App() {
 
     switch (msg.event) {
       case 'pipeline_started':
+        setTopic(msg.topic || '')
+        setPlannedLoops(msg.planned_loops || 0)
+        setCurrentLoop(0)
         setAuditEntries(prev => [{
           ts: now,
           msg: `Pipeline started: ${msg.topic} | Budget: $${msg.budget} | ${msg.planned_loops} loops`,
@@ -89,6 +102,7 @@ export default function App() {
         break
 
       case 'loop_start':
+        setCurrentLoop(msg.loop || 0)
         setAuditEntries(prev => [{
           ts: now,
           msg: `Loop ${msg.loop}: "${msg.query}"`,
@@ -135,6 +149,13 @@ export default function App() {
           ...prev,
           [msg.agent]: { status: 'FRAUD', reason: msg.reason }
         }))
+        setFraudBanner({
+          agent: msg.agent,
+          reason: msg.reason,
+          ts: Date.now()
+        })
+        clearTimeout(fraudTimer.current)
+        fraudTimer.current = setTimeout(() => setFraudBanner(null), 4000)
         setAlerts(prev => [{
           type: 'fraud',
           message: `🚨 FRAUD DETECTED: ${msg.agent}`,
@@ -150,6 +171,7 @@ export default function App() {
 
       case 'pipeline_complete':
         setRunning(false)
+        setCurrentLoop(plannedLoops || currentLoop)
         setAlerts(prev => [{
           type: 'success',
           message: `✅ Pipeline complete — ${msg.transaction_count} Nanopayments | $${msg.total_spent?.toFixed(4)} spent`,
@@ -171,9 +193,13 @@ export default function App() {
     setAgentStates({})
     setAlerts([])
     setReport(null)
+    setTopic(taskData.topic || '')
     setTxCount(0)
     setTotalSpent(0)
     setAuditEntries([])
+    setPlannedLoops(0)
+    setCurrentLoop(0)
+    setFraudBanner(null)
     setRunning(true)
 
     // Reset agent states to IDLE
@@ -188,6 +214,28 @@ export default function App() {
         body: JSON.stringify(taskData)
       })
       const result = await res.json()
+
+      if (!res.ok || result?.error) {
+        setRunning(false)
+        setAlerts(prev => [{
+          type: 'fraud',
+          message: `Pipeline failed: ${result?.error || `HTTP ${res.status}`}`,
+          id: Date.now()
+        }, ...prev])
+
+        if (result?.audit_log) {
+          const entries = result.audit_log.map(e => ({
+            ts: e.timestamp?.slice(11, 19) || '',
+            msg: e.message,
+            type: e.message?.toUpperCase().includes('FRAUD') ? 'fraud'
+                : e.message?.includes('confirmed') || e.message?.includes('Paying') ? 'payment'
+                : 'default'
+          }))
+          setAuditEntries(entries)
+        }
+        return
+      }
+
       setReport(result)
 
       // Add any audit entries from the final result
@@ -215,24 +263,25 @@ export default function App() {
   return (
     <div className="app">
 
-      {/* ── Header ────────────────────────────────────────────────────── */}
       <div className="header">
         <div className="header-left">
           <h1>Agora</h1>
-          <p className="tagline">Competitive Intelligence at $0.05 · Autonomous Research Protocol on Arc</p>
+          <p className="tagline">Autonomous Research Protocol on Arc</p>
         </div>
         <div className="header-stats">
           <div className="stat-pill">
-            <span className={`dot ${wsConnected ? 'dot-green' : 'dot-yellow'}`} />
-            {wsConnected ? 'Live' : 'Connecting...'}
-          </div>
-          <div className="stat-pill">
             <span className="dot dot-blue" />
-            {txCount} txns on-chain
+            TESTNET
           </div>
           <div className="stat-pill">
-            <span className="dot dot-yellow" />
-            ${totalSpent.toFixed(4)} USDC spent
+            <span className={`dot ${wsConnected ? 'dot-green' : 'dot-yellow'}`} />
+            {wsConnected ? 'LIVE' : 'CONNECTING'}
+          </div>
+          <div className="stat-pill">
+            {txCount} TXNS
+          </div>
+          <div className="stat-pill stat-money">
+            ${totalSpent.toFixed(6)} SPENT
           </div>
           <a
             href="https://testnet.arcscan.app"
@@ -240,23 +289,30 @@ export default function App() {
             rel="noreferrer"
             className="explorer-link"
           >
-            Arc Explorer →
+            ARC EXPLORER ↗
           </a>
         </div>
       </div>
 
-      {/* ── Tags ──────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+      <div className="tags-row">
         <span className="tag tag-arc">⛓ Arc Testnet</span>
         <span className="tag tag-usdc">💵 USDC</span>
         <span className="tag tag-circle">⭕ Circle Nanopayments</span>
         <span className="tag tag-arc">x402 Standard</span>
       </div>
 
-      {/* ── Alerts ────────────────────────────────────────────────────── */}
+      {fraudBanner && (
+        <div className="fraud-banner">
+          <div className="fraud-banner-title">⚠ FRAUD DETECTED · RECOVERING</div>
+          <div className="fraud-banner-line">INVALID OUTPUT from {fraudBanner.agent}</div>
+          <div className="fraud-banner-line">Reason: {fraudBanner.reason}</div>
+          <div className="fraud-banner-line">Action: Task redistributed — agent wallet flagged</div>
+        </div>
+      )}
+
       {alerts.length > 0 && (
         <div className="alerts">
-          {alerts.slice(0, 4).map((a) => (
+          {alerts.slice(0, 2).map((a) => (
             <div key={a.id} className={`alert alert-${a.type === 'fraud' ? 'fraud' : a.type === 'success' ? 'success' : 'info'}`}>
               {a.message}
               {a.reason && <div className="alert-reason">{a.reason?.slice(0, 120)}</div>}
@@ -265,62 +321,83 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Task Submit ───────────────────────────────────────────────── */}
-      <div className="panel" style={{ marginBottom: 20 }}>
-        <div className="panel-header">
-          <span>🎯</span>
-          <span className="panel-title">New Research Task</span>
-        </div>
-        <div className="panel-body">
-          <TaskSubmit onSubmit={handleTaskSubmit} running={running} />
-        </div>
-      </div>
-
-      {/* ── Agent Cards ───────────────────────────────────────────────── */}
-      <div className="agent-grid">
-        {AGENTS.map(agent => (
-          <AgentCard
-            key={agent.key}
-            agent={agent}
-            state={agentStates[agent.name] || { status: 'IDLE' }}
-          />
-        ))}
-      </div>
-
-      {/* ── Margin Calculator ─────────────────────────────────────────── */}
-      <MarginCalculator txCount={txCount} totalSpent={totalSpent} />
-
-      {/* ── Bottom panels ─────────────────────────────────────────────── */}
-      <div className="bottom-grid">
-        <div className="panel">
+      {mode === 'landing' && (
+        <div className="panel landing-panel">
           <div className="panel-header">
-            <span>⚡</span>
-            <span className="panel-title">Live Nanopayments</span>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              {txCount} settled on Arc
-            </span>
+            <span>🎯</span>
+            <span className="panel-title">What do you want to research?</span>
           </div>
           <div className="panel-body">
-            <TransactionFeed transactions={transactions} />
+            <TaskSubmit onSubmit={handleTaskSubmit} running={running} />
           </div>
         </div>
+      )}
 
-        <div className="panel">
-          <div className="panel-header">
-            <span>📋</span>
-            <span className="panel-title">Audit Log</span>
-            <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-              chain of thought
-            </span>
-          </div>
-          <div className="panel-body">
-            <AuditLog entries={auditEntries} />
-          </div>
-        </div>
-      </div>
+      {mode === 'running' && (
+        <>
+          <div className="running-shell">
+            <div className="running-left panel">
+              <div className="panel-header">
+                <span>🤖</span>
+                <span className="panel-title">Agent Economy</span>
+              </div>
+              <div className="panel-body">
+                <div className="agent-grid">
+                  {AGENTS.map(agent => (
+                    <AgentCard
+                      key={agent.key}
+                      agent={agent}
+                      state={agentStates[agent.name] || { status: 'IDLE' }}
+                    />
+                  ))}
+                </div>
 
-      {/* ── Report ────────────────────────────────────────────────────── */}
-      {report && <ReportDisplay report={report} />}
+                <div className="progress-wrap">
+                  <div className="progress-head">
+                    <span>Progress</span>
+                    <span>{progressPct}%</span>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${progressPct}%` }} />
+                  </div>
+                  <div className="progress-meta">Loop {currentLoop || 0} of {plannedLoops || '—'} · {topic || 'Task running'}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="running-right">
+              <div className="panel">
+                <div className="panel-header">
+                  <span>⚡</span>
+                  <span className="panel-title">Transaction Feed</span>
+                </div>
+                <div className="panel-body">
+                  <TransactionFeed transactions={transactions} />
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panel-header">
+                  <span>📋</span>
+                  <span className="panel-title">Audit Log</span>
+                </div>
+                <div className="panel-body">
+                  <AuditLog entries={auditEntries} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <MarginCalculator txCount={txCount} totalSpent={totalSpent} />
+        </>
+      )}
+
+      {mode === 'complete' && (
+        <>
+          <MarginCalculator txCount={txCount} totalSpent={totalSpent} />
+          <ReportDisplay report={report} />
+        </>
+      )}
 
     </div>
   )

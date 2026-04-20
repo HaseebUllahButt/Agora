@@ -67,6 +67,7 @@ User ($0.05–$5.00 budget)
 | Summarizer | 8003 | $0.001 | Condenses 3 loops of extractions into key findings |
 | **Analyst** | **8004** | **$0.002** | 5 actionable recommendations tailored to your company |
 | Formatter | 8005 | $0.0005 | Polished McKinsey-style markdown report |
+| Consultancy (optional) | 8006 | $0.0015 | Practical consultancy advice from all pipeline outputs (checkbox-controlled) |
 
 ---
 
@@ -92,7 +93,7 @@ machine-readable, composable.
 ### Prerequisites
 ```bash
 pip install -r requirements.txt
-# Get API key: GEMINI_API_KEY
+# Get API key: GROQ_API_KEY
 # Web search runs on DuckDuckGo (free, no key required)
 # Copy .env.example to .env and fill in your keys
 cp .env.example .env
@@ -106,13 +107,14 @@ python scripts/fund_analyst.py
 
 ### Step 2 — Start All Agent Servers
 ```bash
-# Open 6 terminals, or use a process manager like tmux/honcho
+# Open 7 terminals, or use a process manager like tmux/honcho
 
 uvicorn agents.web_search_agent:app --port 8001 --reload
 uvicorn agents.extractor_agent:app  --port 8002 --reload
 uvicorn agents.summarizer_agent:app --port 8003 --reload
 uvicorn agents.analyst_agent:app    --port 8004 --reload
 uvicorn agents.formatter_agent:app  --port 8005 --reload
+uvicorn agents.consultancy_agent:app --port 8006 --reload
 uvicorn api.main:app                --port 8000 --reload
 ```
 

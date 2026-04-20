@@ -18,7 +18,7 @@ export default function AuditLog({ entries }) {
 
   return (
     <div className="audit-list">
-      {[...entries].reverse().map((e, i) => (
+      {entries.map((e, i) => (
         <div
           key={i}
           className={`audit-entry ${

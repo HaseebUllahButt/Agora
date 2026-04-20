@@ -8,45 +8,44 @@ export default function MarginCalculator({ txCount, totalSpent }) {
   const ethCost  = txCount * ETH_GAS_PER_TX
   const saved    = Math.max(0, ethCost - arcCost)
   const pctSaved = ethCost > 0 ? ((saved / ethCost) * 100).toFixed(2) : '0.00'
-  const multiple = ethCost > 0 && arcCost > 0
-    ? Math.round(ethCost / arcCost).toLocaleString()
-    : '—'
+  const margin = ethCost > 0 ? (100 - ((arcCost / ethCost) * 100)).toFixed(2) : '0.00'
 
   return (
     <div className="margin-calc">
       <h3>
-        💸 Cost Comparison — Arc vs Ethereum
+        MARGIN CALCULATOR
       </h3>
 
-      <div className="margin-row">
-        <span className="margin-label">Arc Nanopayments cost</span>
-        <span className="margin-value arc">${arcCost.toFixed(4)} USDC</span>
-      </div>
-
-      <div className="margin-row">
-        <span className="margin-label">
-          Same {txCount} txns on Ethereum&nbsp;
-          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>({txCount} × ${ETH_GAS_PER_TX} gas)</span>
-        </span>
-        <span className="margin-value eth">${ethCost.toFixed(2)} in gas</span>
+      <div className="margin-big-grid">
+        <div className="margin-big margin-big-eth">
+          <div className="margin-big-label">Ethereum Cost</div>
+          <div className="margin-big-value">${ethCost.toFixed(2)}</div>
+        </div>
+        <div className="margin-big margin-big-arc">
+          <div className="margin-big-label">Arc Cost</div>
+          <div className="margin-big-value">${arcCost.toFixed(6)}</div>
+        </div>
       </div>
 
       <div className="margin-row">
         <span className="margin-label">You saved</span>
-        <span className="margin-value saved">${saved.toFixed(2)}</span>
+        <span className="margin-value saved">${saved.toFixed(6)}</span>
       </div>
 
       <div className="margin-row">
-        <span className="margin-label">Cost reduction</span>
-        <span className="margin-value pct">{pctSaved}%</span>
+        <span className="margin-label">Arc margin</span>
+        <span className="margin-value pct">{margin}%</span>
+      </div>
+
+      <div className="margin-row">
+        <span className="margin-label">Reduction</span>
+        <span className="margin-value arc">{pctSaved}%</span>
       </div>
 
       <div className="margin-hero">
-        <div className="margin-hero-num">
-          {txCount === 0 ? '—' : `${multiple}×`}
-        </div>
+        <div className="margin-hero-num">{txCount} txns · live updated</div>
         <div className="margin-hero-label">
-          cheaper on Arc · {txCount} Nanopayments settled on-chain · powered by Circle
+          Same workload on Ethereum: ${ethCost.toFixed(2)} vs Arc: ${arcCost.toFixed(6)}
         </div>
       </div>
     </div>

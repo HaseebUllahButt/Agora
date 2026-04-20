@@ -25,7 +25,6 @@ WebSocket events emitted throughout for real-time frontend updates.
 import os
 import asyncio
 import httpx
-import google.generativeai as genai
 from dotenv import load_dotenv
 
 from shared.circle_client import send_usdc
@@ -37,8 +36,6 @@ from orchestrator.task_decomposer import decompose_task
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
 ORCHESTRATOR_ADDRESS = os.getenv("ORCHESTRATOR_ADDRESS")
 
 
@@ -48,7 +45,7 @@ async def call_agent_with_payment(
     budget: BudgetGuardian,
     audit: AuditLogger,
     websocket_emit=None,
-    max_retries: int = 3
+    max_retries: int = 2
 ) -> dict | None:
     """
     Call an agent using the full x402 Nanopayment flow.
@@ -86,14 +83,14 @@ async def call_agent_with_payment(
         audit.log(f"BUDGET GUARD: Cannot hire {agent['name']} (${price}) — insufficient funds")
         return None
 
-    for attempt in range(max_retries):
-        try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        for attempt in range(max_retries):
+            try:
                 # ── Step 1: Initial call, expect 402 ─────────────────────────
                 response = await client.post(
                     f"{endpoint}/{route}",
                     json=payload,
-                    timeout=10.0
+                    timeout=6.0
                 )
 
                 if response.status_code not in (402, 200):
@@ -101,7 +98,7 @@ async def call_agent_with_payment(
                         f"Unexpected {response.status_code} from {agent['name']} "
                         f"attempt {attempt + 1}"
                     )
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(min(0.8 * (attempt + 1), 2.0))
                     continue
 
                 # Agent returned 200 without payment (e.g. during testing)
@@ -201,9 +198,9 @@ async def call_agent_with_payment(
                 audit.log(f"Output validated from {agent['name']}")
                 return result
 
-        except Exception as e:
-            audit.log(f"Error calling {agent_key} attempt {attempt + 1}: {str(e)}")
-            await asyncio.sleep(2)
+            except Exception as e:
+                audit.log(f"Error calling {agent_key} attempt {attempt + 1}: {str(e)}")
+                await asyncio.sleep(min(0.8 * (attempt + 1), 2.0))
 
     audit.log(f"FAILED: {agent_key} did not return valid output after {max_retries} attempts")
     return None
@@ -214,6 +211,7 @@ async def run_agora_pipeline(
     user_budget: float,
     company_context: dict,
     task_type: str = "competitive_intelligence",
+    include_consultancy: bool = False,
     websocket_emit=None
 ) -> dict:
     """
@@ -251,7 +249,7 @@ async def run_agora_pipeline(
     # Rough estimate: 2/3 of loops trigger summarizer
     effective_cost_per_loop = loop_cost + (summarize_cost / 3)
     max_loops = max(1, int(available / effective_cost_per_loop))
-    loops = min(max_loops, 25)
+    loops = min(max_loops, 12)
 
     audit.log(f"Research loops planned: {loops}")
     if websocket_emit:
@@ -389,6 +387,32 @@ async def run_agora_pipeline(
     else:
         audit.log("Skipping formatter — insufficient budget")
 
+    # ── Consultancy — optional expert advice (checkbox-controlled) ───────────
+    consultancy_result = None
+    if include_consultancy:
+        if budget.can_spend(float("0.0015")):
+            consultancy_result = await call_agent_with_payment(
+                "consultancy",
+                {
+                    "topic": topic,
+                    "company_context": company_context,
+                    "search_results": all_search_results[:20],
+                    "summaries": all_summaries,
+                    "analyst_recommendations": analyst_result,
+                    "formatted_report": formatter_result,
+                },
+                budget, audit, websocket_emit
+            )
+            if _is_fatal(consultancy_result):
+                audit.log("Skipping consultancy output: validator service unavailable")
+                consultancy_result = None
+            if consultancy_result:
+                audit.log("Consultancy advice generated")
+        else:
+            audit.log("Skipping consultancy — insufficient budget")
+    else:
+        audit.log("Skipping consultancy — not requested")
+
     # ── Pipeline complete ──────────────────────────────────────────────────────
     tx_count = len(budget.transactions)
     audit.log(
@@ -404,14 +428,23 @@ async def run_agora_pipeline(
             "remaining": budget.remaining()
         })
 
+    no_successful_paid_calls = tx_count == 0 and formatter_result is None and analyst_result is None
+    error_message = (
+        "No paid agent calls succeeded. Check GROQ_API_KEY for validation and Circle wallet/payment configuration."
+        if no_successful_paid_calls else None
+    )
+
     return {
         "topic": topic,
         "task_type": task_type,
         "report": formatter_result,
         "recommendations": analyst_result,
+        "consultancy_advice": consultancy_result,
         "summaries": all_summaries,
         "audit_log": audit.get_log(),
         "budget_summary": budget.summary(),
         "transaction_count": tx_count,
-        "loops_completed": min(loops, len(all_search_results))
+        "loops_completed": min(loops, len(all_search_results)),
+        "status": "failed" if no_successful_paid_calls else "ok",
+        "error": error_message,
     }

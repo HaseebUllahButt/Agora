@@ -17,7 +17,9 @@ export default function TransactionFeed({ transactions }) {
     <div className="tx-list">
       {transactions.map((tx, i) => (
         <div key={i} className="tx-item">
-          <span className="tx-amount">+${tx.amount}</span>
+          <span className="tx-dot">●</span>
+          <span className="tx-amount">{Number(tx.amount).toFixed(4)} USDC</span>
+          <span className="tx-arrow">→</span>
           <span className="tx-agent">{tx.agent.replace(' Agent', '')}</span>
           <a
             href={tx.explorerUrl || `https://testnet.arcscan.app/tx/${tx.txHash}`}
@@ -25,7 +27,7 @@ export default function TransactionFeed({ transactions }) {
             rel="noreferrer"
             className="tx-hash"
           >
-            {tx.txHash?.slice(0, 8)}…
+            {tx.txHash?.slice(0, 8)}...
           </a>
           <span className="tx-time">{tx.ts}</span>
         </div>

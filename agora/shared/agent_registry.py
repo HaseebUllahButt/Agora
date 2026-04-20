@@ -108,6 +108,19 @@ AGENT_REGISTRY: dict[str, dict] = {
         ),
         "route": "format",
         "active": True
+    },
+    "consultancy": {
+        "name": "Consultancy Agent",
+        "endpoint": "http://localhost:8006",
+        "wallet_address": os.getenv("CONSULTANCY_AGENT_ADDRESS"),
+        "wallet_id": os.getenv("CONSULTANCY_AGENT_ID"),
+        "price_per_call": "0.0015",
+        "capability": (
+            "Produces practical consultancy advice from all available research, "
+            "recommendations, and report outputs. Returns action plan, KPIs, and risk mitigations."
+        ),
+        "route": "consult",
+        "active": True
     }
 }
 

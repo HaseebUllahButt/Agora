@@ -6,21 +6,25 @@ export default function ReportDisplay({ report }) {
 
   const markdown = report?.report?.report_markdown || ''
   const recs     = report?.recommendations?.recommendations || ''
+  const consultancy = report?.consultancy_advice?.consultancy_advice || ''
   const budget   = report?.budget_summary || {}
   const txCount  = report?.transaction_count || 0
+  const arcCost = Number(budget.total_spent || 0)
+  const ethCost = txCount * 2.95
+  const savings = Math.max(0, ethCost - arcCost)
 
   return (
     <div className="report-wrap">
       <div className="panel">
         <div className="panel-header">
-          <span>📊</span>
-          <span className="panel-title">Research Report</span>
+          <span>✅</span>
+          <span className="panel-title">Pipeline Complete</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-              {txCount} Nanopayments
+              {txCount} txns
             </span>
-            <span style={{ fontSize: 12, color: 'var(--yellow)', fontFamily: 'var(--font-mono)' }}>
-              ${budget.total_spent?.toFixed(4)} spent
+            <span style={{ fontSize: 12, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
+              ${arcCost.toFixed(6)} spent
             </span>
             <a
               href="https://testnet.arcscan.app"
@@ -33,43 +37,38 @@ export default function ReportDisplay({ report }) {
           </div>
         </div>
         <div className="panel-body">
-          {markdown ? (
-            <div className="report-content">
-              <ReactMarkdown>{markdown}</ReactMarkdown>
+          <div className="report-grid">
+            <div>
+              <div className="report-col-title">Final Report</div>
+              <div className="report-content">
+                <ReactMarkdown>{markdown || consultancy || '_No report available_'}</ReactMarkdown>
+              </div>
             </div>
-          ) : recs ? (
-            <div className="report-content">
-              <ReactMarkdown>{recs}</ReactMarkdown>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <div className="empty-icon">📄</div>
-              <div>Report is being generated…</div>
-            </div>
-          )}
 
-          {/* Budget summary */}
-          {budget.total_spent > 0 && (
-            <div style={{
-              marginTop: 20,
-              padding: '12px 16px',
-              background: 'rgba(99,130,255,0.05)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              color: 'var(--text-secondary)',
-              display: 'flex',
-              gap: 24,
-              flexWrap: 'wrap'
-            }}>
-              <span>Budget: <b style={{ color: 'var(--text-primary)' }}>${budget.total_budget?.toFixed(4)}</b></span>
-              <span>Spent: <b style={{ color: 'var(--yellow)' }}>${budget.total_spent?.toFixed(4)}</b></span>
-              <span>Remaining: <b style={{ color: 'var(--green)' }}>${budget.remaining?.toFixed(4)}</b></span>
-              <span>Transactions: <b style={{ color: 'var(--accent)' }}>{txCount}</b></span>
-              <span>Utilisation: <b style={{ color: 'var(--accent-2)' }}>{budget.utilization_pct}%</b></span>
+            <div>
+              <div className="report-col-title">Strategic Recommendations</div>
+              <div className="report-content">
+                <ReactMarkdown>{recs || '_Recommendations unavailable_'}</ReactMarkdown>
+              </div>
             </div>
-          )}
+          </div>
+
+          <div className="receipt-wrap">
+            <div className="receipt-title">Receipt</div>
+            <div className="receipt-grid">
+              <div className="receipt-row"><span>Total transactions</span><b>{txCount}</b></div>
+              <div className="receipt-row"><span>Total spent</span><b>${arcCost.toFixed(6)}</b></div>
+              <div className="receipt-row"><span>Cost on Ethereum</span><b className="num-red">${ethCost.toFixed(2)}</b></div>
+              <div className="receipt-row"><span>Cost on Arc</span><b>${arcCost.toFixed(6)}</b></div>
+              <div className="receipt-row"><span>Savings</span><b>${savings.toFixed(6)}</b></div>
+              <div className="receipt-row"><span>Budget remaining</span><b>${Number(budget.remaining || 0).toFixed(6)}</b></div>
+            </div>
+
+            <div className="receipt-actions">
+              <button type="button" className="submit-btn receipt-btn" onClick={() => window.location.reload()}>Run Another Task</button>
+              <button type="button" className="submit-btn receipt-btn secondary" onClick={() => window.print()}>Export Report as PDF</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

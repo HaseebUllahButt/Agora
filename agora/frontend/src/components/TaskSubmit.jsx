@@ -11,6 +11,11 @@ export default function TaskSubmit({ onSubmit, running }) {
   const [strength, setStrength] = useState('')
   const [weakness, setWeakness] = useState('')
   const [market,   setMarket]   = useState('')
+  const [includeConsultancy, setIncludeConsultancy] = useState(false)
+
+  const budgetValue = Math.max(0.05, Math.min(0.5, parseFloat(budget) || 0.1))
+  const estimatedTxns = Math.max(8, Math.floor(budgetValue / 0.005))
+  const estimatedSecs = Math.max(25, Math.floor(estimatedTxns * 2))
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -20,6 +25,7 @@ export default function TaskSubmit({ onSubmit, running }) {
       topic:   topic.trim(),
       budget:  parseFloat(budget) || 0.10,
       task_type: 'competitive_intelligence',
+      include_consultancy: includeConsultancy,
       company_context: {
         company_size:  size.toLowerCase(),
         stage:         stage.toLowerCase().replace(' ', '-'),
@@ -51,23 +57,37 @@ export default function TaskSubmit({ onSubmit, running }) {
       {/* Budget */}
       <div className="form-group">
         <label className="form-label">Budget (USDC)</label>
+        <div className="budget-track-wrap">
+          <div className="budget-range-head">
+            <span>$0.05</span>
+            <span>$0.50</span>
+          </div>
+          <input
+            id="budget-slider"
+            className="budget-slider"
+            type="range"
+            min="0.05"
+            max="0.50"
+            step="0.01"
+            value={budgetValue}
+            onChange={e => setBudget(e.target.value)}
+            disabled={running}
+          />
+          <div className="budget-live">${budgetValue.toFixed(2)} ← drag to set</div>
+        </div>
         <div className="budget-row">
           <input
             id="budget-input"
-            className="form-input"
+            className="form-input budget-input"
             type="number"
             min="0.05"
-            max="5"
+            max="0.50"
             step="0.01"
             value={budget}
             onChange={e => setBudget(e.target.value)}
             disabled={running}
-            style={{ maxWidth: 140 }}
           />
-          <span className="budget-hint">
-            ${budget} ≈ {Math.floor(parseFloat(budget || 0) / 0.004)} agent calls
-            · same on Ethereum ≈ ${(parseFloat(budget || 0) * 2.95 / 0.004).toFixed(0)} in gas
-          </span>
+          <span className="budget-hint">Estimated: ~{estimatedTxns} transactions, ~{estimatedSecs} seconds</span>
         </div>
       </div>
 
@@ -140,6 +160,19 @@ export default function TaskSubmit({ onSubmit, running }) {
         />
       </div>
 
+      <div className="form-group" style={{ marginTop: 4 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text-secondary)', fontSize: 14 }}>
+          <input
+            id="consultancy-checkbox"
+            type="checkbox"
+            checked={includeConsultancy}
+            onChange={e => setIncludeConsultancy(e.target.checked)}
+            disabled={running}
+          />
+          Include consultancy advice (extra paid agent)
+        </label>
+      </div>
+
       <button
         id="submit-btn"
         type="submit"
@@ -152,7 +185,7 @@ export default function TaskSubmit({ onSubmit, running }) {
             Agents working…
           </span>
         ) : (
-          '🚀 Run Research Pipeline'
+          `▶ RUN AGORA  ($${budgetValue.toFixed(2)} USDC)`
         )}
       </button>
 

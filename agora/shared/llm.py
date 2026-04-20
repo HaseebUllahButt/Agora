@@ -1,9 +1,8 @@
 """
 shared/llm.py
 
-Lightweight Gemini API wrapper.
-We use httpx directly to avoid the heavy google-generativeai SDK and grpcio dependencies,
-which can take 20+ minutes to compile from source on unsupported/bleeding-edge Python versions.
+Lightweight Groq API wrapper.
+Uses OpenAI-compatible chat completions endpoint over HTTP.
 """
 
 import os
@@ -13,37 +12,47 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-async def generate_gemini_content(prompt: str, system_instruction: str = None) -> str:
+async def generate_llm_content(prompt: str, system_instruction: str = None) -> str:
     """
-    Call Gemini REST API directly.
+    Call Groq chat completions API directly.
     """
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    if not api_key or api_key == "your_gemini_api_key_here":
-        raise ValueError("GEMINI_API_KEY not set in .env")
+    api_key = os.getenv("GROQ_API_KEY")
+    model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+    if not api_key or api_key == "your_groq_api_key_here":
+        raise ValueError("GROQ_API_KEY not set in .env")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
+
     payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
+        "model": model,
+        "messages": messages,
+        "temperature": 0.2,
     }
 
-    if system_instruction:
-        payload["system_instruction"] = {
-            "parts": [{"text": system_instruction}]
-        }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
 
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(url, json=payload)
+        response = await client.post(url, json=payload, headers=headers)
         
         if response.status_code != 200:
-            raise Exception(f"Gemini API error ({response.status_code}): {response.text}")
+            raise Exception(f"Groq API error ({response.status_code}): {response.text}")
             
         data = response.json()
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
+            return data["choices"][0]["message"]["content"]
         except (KeyError, IndexError):
-            raise Exception(f"Unexpected Gemini response format: {data}")
+            raise Exception(f"Unexpected Groq response format: {data}")
+
+
+async def generate_gemini_content(prompt: str, system_instruction: str = None) -> str:
+    """Backward-compatible alias for existing imports across the codebase."""
+    return await generate_llm_content(prompt, system_instruction)
 
