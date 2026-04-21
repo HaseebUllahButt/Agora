@@ -1,10 +1,7 @@
 fastapi
 uvicorn
-httpx
 pydantic
 python-dotenv
-langgraph
-duckduckgo-search
-circle-developer-controlled-wallets
-websockets
-web3
+redis
+eth-keys
+eth-utils
