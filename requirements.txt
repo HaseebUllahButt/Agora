@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+redis
+eth-keys
+eth-utils
+httpx
