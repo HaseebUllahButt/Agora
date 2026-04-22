@@ -5,4 +5,4 @@ python-dotenv
 redis
 eth-keys
 eth-utils
-httpx
+httpxpycryptodome
