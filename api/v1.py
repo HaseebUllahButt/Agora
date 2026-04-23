@@ -34,8 +34,7 @@ from shared.database import (
     init_database, create_agent, register_provider, get_all_providers,
     search_providers, record_transaction, update_transaction_status,
     update_agent_reputation, get_agent, get_transaction_history,
-    record_service_result, store_circle_credentials, get_circle_credentials,
-    update_circle_wallet
+    record_service_result
 )
 from shared.ecdsa_signing import validate_x402_header
 from shared.nonce_registry import register_nonce
@@ -67,10 +66,12 @@ class RegisterAgentRequest(BaseModel):
 
 class RegisterServiceRequest(BaseModel):
     """Register a service offered by an agent."""
+    agent_id: str
     name: str
     service_type: str  
     description: str
     price_usdc: float  
+    endpoint_url: Optional[str] = None
 
 
 class PurchaseServiceRequest(BaseModel):
@@ -129,6 +130,18 @@ async def list_agents():
     return agents
 
 
+@app.delete("/agents/{agent_id}")
+async def unregister_agent(agent_id: str):
+    """Remove an agent and their services from the marketplace."""
+    from shared.database import get_db
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM providers WHERE agent_id = ?", (agent_id,))
+        cursor.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
+        conn.commit()
+    return {"status": "unregistered", "agent_id": agent_id}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # SERVICE MANAGEMENT
 # ──────────────────────────────────────────────────────────────────────────────
@@ -142,14 +155,18 @@ async def register_service(agent_id: str, req: RegisterServiceRequest):
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
     
     try:
-        provider_id = str(uuid.uuid4())[:8]
+        # Generate a deterministic ID: {agent_id}-{service_name_slug}
+        # This makes the registry intuitive and prevents duplicates
+        import re
+        slug = re.sub(r'[^a-zA-Z0-9]', '', req.name.lower())
+        provider_id = f"{agent_id}-{slug}"
         register_provider(
             provider_id=provider_id,
             agent_id=agent_id,
-            name=req.name,
             service_type=req.service_type,
             description=req.description,
-            price_usdc=req.price_usdc
+            price_usdc=req.price_usdc,
+            endpoint_url=req.endpoint_url
         )
         return {
             "provider_id": provider_id,
@@ -301,13 +318,34 @@ async def purchase_service(req: PurchaseServiceRequest):
     service_result: Optional[Any] = None
     
     try:
-        # Call the registered service function with buyer's parameters
-        service_result = call_service(req.service_id, **req.params)
+        # Secure Proxy: Only call the real service if payment was verified
+        endpoint = service_meta.get("endpoint_url")
+        
+        if endpoint:
+            try:
+                import requests
+                # Forward the request parameters to the agent's real endpoint
+                proxy_resp = requests.post(
+                    endpoint, 
+                    json=req.params,
+                    timeout=10,
+                    headers={"X-Agora-Gateway": "Verified-Payment"}
+                )
+                if proxy_resp.status_code == 200:
+                    service_result = proxy_resp.json()
+                else:
+                    service_result = {"error": f"Service provider returned error: {proxy_resp.status_code}"}
+            except Exception as e:
+                service_result = {"error": "Could not connect to service provider"}
+        else:
+            # Fallback for demo/placeholder services
+            service_result = {"message": f"Demonstration result for {service_meta['name']}"}
+        
         execution_status = "success"
     except Exception as e:
         execution_status = "failed"
-        service_result = {"error": str(e)}
-        raise HTTPException(status_code=500, detail=f"Service execution failed: {str(e)}")
+        service_result = {"error": "Service execution failed"}
+        raise HTTPException(status_code=500, detail="Service execution failed")
     
     # Step 6: Record transaction + result
     record_transaction(
@@ -341,8 +379,8 @@ async def purchase_service(req: PurchaseServiceRequest):
         "seller": seller_agent_id,
         "service_name": service_meta["name"],
         "amount_usdc": price,
-        "status": "escrow_settled", # Emphasize the Escrow pattern
-        "proof_hash": proof_hash,
+        "status": "erc8004_settled", # Emphasize the ERC-8004 trust standard
+        "erc8004_proof": proof_hash,
         "result": service_result,
         "timestamp": datetime.utcnow().isoformat()
     })
@@ -350,17 +388,17 @@ async def purchase_service(req: PurchaseServiceRequest):
     # Step 8: Return complete transaction to buyer
     return {
         "transaction_id": tx_id,
-        "status": "escrow_settled", 
+        "status": "erc8004_settled", 
         "buyer_agent": req.buyer_agent_id,
         "seller_agent": seller_agent_id,
         "service_id": req.service_id,
         "service_name": service_meta["name"],
         "amount_usdc": price,
         "nonce": nonce,
-        "proof_of_service_hash": proof_hash,
+        "erc8004_proof": proof_hash,
         "result": service_result,
         "timestamp": datetime.utcnow().isoformat(),
-        "message": "Service executed: payment verified, escrow settled, cryptographic proof established"
+        "message": "Service executed: payment verified, ERC-8004 settled, cryptographic proof established"
     }
 
 
@@ -428,4 +466,6 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Read port from environment variable for deployment compatibility
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

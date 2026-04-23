@@ -99,6 +99,8 @@ class Agent:
         
         data[self.id] = {
             "name": self.name,
+            "address": self.address,
+            "private_key": self.private_key,
             "circle_wallet_id": self.circle_wallet_id,
             "circle_address": self.circle_address,
             "updated_at": datetime.utcnow().isoformat()
@@ -130,18 +132,58 @@ class Agent:
         balance = 0.0
         if self.circle_client and self.circle_wallet_id:
             balance = self.circle_client.get_balance(self.circle_wallet_id)
-            
-            # Automatically check financial policies during status heartbeat
-            self.check_and_sweep()
         
         return {
             "agent_id": self.id,
             "name": self.name,
             "secp256k1_address": self.address,
-            "arc_address": self.circle_address,
-            "usdc_balance": balance,
-            "wallet_id": self.circle_wallet_id
+            "circle_address": self.circle_address,
+            "balance_usdc": balance,
+            "has_private_key": self.private_key is not None
         }
+
+    def delete(self) -> bool:
+        """Unregister from marketplace and clean up local data."""
+        try:
+            api_url = os.getenv("AGORA_API_URL", "http://localhost:8000")
+            import requests
+            resp = requests.delete(f"{api_url}/agents/{self.id}")
+            
+            # Clean up local config
+            if CONFIG_FILE.exists():
+                with open(CONFIG_FILE, "r") as f:
+                    data = json.load(f)
+                if self.id in data:
+                    del data[self.id]
+                    with open(CONFIG_FILE, "w") as f:
+                        json.dump(data, f, indent=2)
+            
+            return resp.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to delete agent: {e}")
+            return False
+
+    def set_status(self, active: bool) -> bool:
+        """Toggle agent availability on the marketplace."""
+        self.active = active
+        return self.register()
+
+    def sweep_to_address(self, target_address: str) -> str:
+        """Harvest all USDC from agent wallet to a master treasury."""
+        if not self.circle_wallet_id or not self.circle_client:
+            raise ValueError("No circle wallet found.")
+            
+        balance = self.circle_client.get_balance(self.circle_wallet_id)
+        if balance <= 0.01: # Maintain small amount for gas if needed
+            return "Insufficient balance to sweep"
+            
+        logger.info(f"Sweeping {balance} USDC from {self.id} to {target_address}")
+        tx_id = self.circle_client.transfer_usdc(
+            from_wallet_id=self.circle_wallet_id,
+            to_address=target_address,
+            amount_usdc=balance - 0.01 # Leave dust for network fees
+        )
+        return tx_id
 
     def withdraw_earnings(self, to_address: str) -> Dict:
         """
@@ -171,13 +213,15 @@ class Agent:
         if not self.auto_sweep_threshold or not self.main_wallet_address or not self.circle_client:
             return
             
+        logger.info(f"🛡️ [Autonomous Policy Engine] Evaluating financial guardrails for {self.id}...")
         try:
             balance = self.circle_client.get_balance(self.circle_wallet_id)
             if balance >= self.auto_sweep_threshold:
-                logger.info(f"Auto-sweep triggered for {self.id}: Balance ({balance}) >= Threshold ({self.auto_sweep_threshold})")
+                logger.info(f"💰 [Policy Triggered] Balance (${balance}) >= Threshold ($self.auto_sweep_threshold). Initiating autonomous sweep...")
                 self.withdraw_earnings(self.main_wallet_address)
+                logger.info(f"✅ [Policy Executed] Funds successfully moved to main wallet.")
         except Exception as e:
-            logger.error(f"Auto-sweep failed for {self.id}: {e}")
+            logger.error(f"❌ [Policy Failed] Auto-sweep failed: {e}")
 
     def register(self) -> Dict:
         """

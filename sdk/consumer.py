@@ -28,7 +28,7 @@ from shared.ecdsa_signing import sign_x402_header
 from shared.database import (
     search_providers, get_all_providers, record_transaction,
     update_transaction_status, update_agent_reputation, get_agent,
-    get_db, get_circle_credentials
+    get_db
 )
 from sdk.exceptions import BudgetExceeded
 from shared.circle_client import CircleClient, CircleWalletConfig
@@ -164,12 +164,10 @@ class AgoraClient:
             if not seller:
                 raise ValueError(f"Seller not found: {seller_id}")
             
-            # Get seller's Circle credentials to find their wallet address
-            seller_circle_creds = get_circle_credentials(seller_id)
-            if not seller_circle_creds or not seller_circle_creds.get("circle_address"):
-                raise ValueError(f"Seller {seller_id} has no Circle wallet address")
-            
-            seller_circle_address = seller_circle_creds["circle_address"]
+            # Get seller's address from the agent record
+            seller_circle_address = seller.get("address")
+            if not seller_circle_address:
+                raise ValueError(f"Seller {seller_id} has no registered wallet address")
             
             # Execute Circle transfer
             logger.info(f"Settling {amount_usdc} USDC from {self.agent_id} to {seller_id} on Arc...")
@@ -306,11 +304,10 @@ class AgoraClient:
         # REGISTRY MODEL:
         # Agora is a SETTLEMENT + REPUTATION LAYER, not a service provider.
         # 
-        # 1. Buyer sends x402_header (Circle payment proof) to Seller
-        # 2. Seller validates via x402 Facilitator  
-        # 3. Seller delivers service agent-to-agent
-        # 4. Seller claims settlement via Circle Programmable Wallet API
-        # 5. Marketplace records tx for reputation + fraud detection
+        # 1. Buyer sends x402_header (Circle payment proof) to Marketplace
+        # 2. Marketplace validates via Agora Guard (x402 Facilitator)
+        # 3. Marketplace calls the provider function
+        # 4. Result returned with cryptographic proof hash
         #
         # No mock results. Real settlement via Circle on Arc.
         
@@ -480,38 +477,30 @@ class AgoraClient:
 
 def create_agora_client(agent_id: str, budget_usdc: float) -> AgoraClient:
     """
-    Factory function: Create AgoraClient from agent's stored Circle credentials.
-    
-    Requires agent to be registered with Circle integration.
-    
-    Args:
-        agent_id: Agent ID
-        budget_usdc: Session budget
-    
-    Returns:
-        Initialized AgoraClient ready for purchases
-    
-    Raises:
-        ValueError if agent not found or lacks Circle credentials
+    Factory function: Create AgoraClient using environment variables for Circle.
     """
     # Get agent
     agent = get_agent(agent_id)
     if not agent:
         raise ValueError(f"Agent not found: {agent_id}")
     
-    # Get Circle credentials
-    creds = get_circle_credentials(agent_id)
-    if not creds:
-        raise ValueError(f"Agent {agent_id} has no Circle integration")
+    # Get Circle config from environment
+    circle_api_key = os.getenv("CIRCLE_API_KEY")
+    circle_entity_secret = os.getenv("CIRCLE_ENTITY_SECRET")
+    circle_wallet_set_id = os.getenv("CIRCLE_WALLET_SET_ID")
+    circle_wallet_id = os.getenv("CIRCLE_WALLET_ID") # Buyer's source wallet
     
+    if not all([circle_api_key, circle_entity_secret, circle_wallet_set_id]):
+        raise ValueError("Missing Circle credentials in .env")
+
     # Create client
     return AgoraClient(
         agent_id=agent_id,
         private_key=agent.get("private_key"),
-        circle_wallet_id=creds.get("circle_wallet_id"),
-        circle_api_key=creds.get("api_key"),
-        circle_entity_secret=creds.get("entity_secret"),
-        circle_wallet_set_id=creds.get("wallet_set_id"),
+        circle_wallet_id=circle_wallet_id,
+        circle_api_key=circle_api_key,
+        circle_entity_secret=circle_entity_secret,
+        circle_wallet_set_id=circle_wallet_set_id,
         budget_usdc=budget_usdc
     )
 

@@ -8,6 +8,11 @@ import os
 import uuid
 from typing import Optional
 import logging
+import base64
+import binascii
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
+from Crypto.Hash import SHA256
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +28,7 @@ class CircleWalletConfig:
         self,
         api_key: str,
         entity_secret: str,
-        wallet_set_id: str
+        wallet_set_id: str = None
     ):
         self.api_key = api_key
         self.entity_secret = entity_secret
@@ -47,41 +52,97 @@ class CircleClient:
     def __init__(self, config: CircleWalletConfig):
         self.config = config
     
-    def create_wallet(self, agent_id: str) -> dict:
+    def _get_entity_secret_ciphertext(self) -> str:
         """
-        Create a developer-controlled wallet for an agent on Arc testnet.
+        Encrypt the entity secret using Circle's public key.
+        Required for state-changing API calls.
+        """
+        try:
+            # 1. Fetch the Public Key from Circle
+            url = f"{CIRCLE_API_URL}/w3s/config/entity/publicKey"
+            response = self.config.client.get(url)
+            if response.status_code != 200:
+                raise Exception(f"Failed to fetch Circle public key: {response.text}")
+            
+            public_key_pem = response.json()["data"]["publicKey"]
+            
+            # 2. Encrypt the entity secret
+            # The entity secret is 32 bytes (64 hex characters)
+            entity_secret_bytes = binascii.unhexlify(self.config.entity_secret)
+            
+            pub_key = RSA.importKey(public_key_pem)
+            cipher = PKCS1_OAEP.new(pub_key, hashAlgo=SHA256)
+            ciphertext = cipher.encrypt(entity_secret_bytes)
+            
+            return base64.b64encode(ciphertext).decode("utf-8")
+        except Exception as e:
+            logger.error(f"Failed to generate entitySecretCiphertext: {e}")
+            raise
+
+    def create_wallet_set(self, name: str) -> str:
+        """
+        Create a new Developer-Controlled Wallet Set.
         
         Returns:
-            {
-                "wallet_id": "uuid",
-                "address": "0x...",
-                "state": "LIVE",
-                "blockchain": "MATIC"  # Arc mapped as MATIC in Circle
-            }
+            The new walletSetId (UUID string)
         """
         try:
             idempotency_key = str(uuid.uuid4())
             payload = {
                 "idempotencyKey": idempotency_key,
-                "description": f"Agent {agent_id} wallet on Arc"
+                "name": name,
+                "entitySecretCiphertext": self._get_entity_secret_ciphertext()
             }
             
-            # Create wallet under wallet set
-            url = f"{CIRCLE_API_URL}/wallets/{self.config.wallet_set_id}/wallets"
+            url = f"{CIRCLE_API_URL}/w3s/developer/walletSets"
+            response = self.config.client.post(url, json=payload)
+            
+            if response.status_code != 201:
+                logger.error(f"Wallet Set creation failed: {response.text}")
+                raise Exception(f"Failed to create wallet set: {response.text}")
+            
+            wallet_set_id = response.json()["data"]["walletSet"]["id"]
+            logger.info(f"Created Wallet Set: {wallet_set_id}")
+            self.config.wallet_set_id = wallet_set_id
+            return wallet_set_id
+        except Exception as e:
+            logger.error(f"Wallet Set creation error: {e}")
+            raise
+
+    def create_wallet(self, agent_id: str) -> dict:
+        """
+        Create a developer-controlled wallet for an agent on Arc testnet.
+        """
+        try:
+            idempotency_key = str(uuid.uuid4())
+            blockchain = os.getenv("CIRCLE_WALLET_BLOCKCHAIN", "MATIC")
+            payload = {
+                "idempotencyKey": idempotency_key,
+                "description": f"Agent {agent_id} wallet on Arc",
+                "blockchains": [blockchain],
+                "walletSetId": self.config.wallet_set_id,
+                "entitySecretCiphertext": self._get_entity_secret_ciphertext(),
+                "count": 1
+            }
+            
+            # Use developer-controlled wallets endpoint
+            url = f"{CIRCLE_API_URL}/w3s/developer/wallets"
             response = self.config.client.post(url, json=payload)
             
             if response.status_code != 201:
                 logger.error(f"Circle wallet creation failed: {response.text}")
                 raise Exception(f"Failed to create wallet: {response.text}")
             
-            wallet = response.json()["data"]
+            # Response returns a list of wallets
+            wallets = response.json()["data"]["wallets"]
+            wallet = wallets[0]
             logger.info(f"Created wallet for {agent_id}: {wallet['id']}")
             
             return {
                 "wallet_id": wallet["id"],
                 "address": wallet["address"],
                 "state": wallet["state"],
-                "blockchain": wallet["blockchains"][0]["chain"]
+                "blockchain": wallet["blockchain"]
             }
         except Exception as e:
             logger.error(f"Circle wallet creation error: {e}")
@@ -90,14 +151,15 @@ class CircleClient:
     def get_wallet(self, wallet_id: str) -> dict:
         """Get wallet details including balance."""
         try:
-            url = f"{CIRCLE_API_URL}/wallets/{wallet_id}"
+            # Note: For developer-controlled, fetch by ID uses /w3s/wallets/
+            url = f"{CIRCLE_API_URL}/w3s/wallets/{wallet_id}"
             response = self.config.client.get(url)
             
             if response.status_code != 200:
                 logger.error(f"Circle wallet fetch failed: {response.text}")
                 raise Exception(f"Failed to fetch wallet: {response.text}")
             
-            return response.json()["data"]
+            return response.json()["data"]["wallet"]
         except Exception as e:
             logger.error(f"Circle wallet fetch error: {e}")
             raise
@@ -111,12 +173,12 @@ class CircleClient:
         try:
             wallet = self.get_wallet(wallet_id)
             
-            # Find Arc/MATIC balance
-            for blockchain in wallet.get("blockchains", []):
-                if blockchain["chain"] in ["MATIC", "POLYGON"]:  # Arc mapped as MATIC
-                    for token in blockchain.get("tokenBalances", []):
-                        if token["token"]["address"].lower() == USDC_ADDRESS.lower():
-                            return float(token["amount"])
+            # Standard balance check for W3S wallets
+            balances = wallet.get("balances", [])
+            for b in balances:
+                # Some APIs return amount as a string
+                if b.get("token", {}).get("address", "").lower() == USDC_ADDRESS.lower():
+                    return float(b.get("amount", 0.0))
             
             return 0.0
         except Exception as e:
@@ -155,12 +217,14 @@ class CircleClient:
             
             payload = {
                 "idempotencyKey": idempotency_key,
-                "amounts": [str(amount_usdc)],
-                "destinations": [to_address],
-                "feeLevel": "MEDIUM"
+                "amount": [str(amount_usdc)],
+                "destinationAddress": to_address,
+                "feeLevel": "MEDIUM",
+                "walletId": from_wallet_id,
+                "entitySecretCiphertext": self._get_entity_secret_ciphertext()
             }
             
-            url = f"{CIRCLE_API_URL}/wallets/{from_wallet_id}/transfers"
+            url = f"{CIRCLE_API_URL}/w3s/developer/transactions/transfer"
             response = self.config.client.post(url, json=payload)
             
             if response.status_code != 201:
@@ -183,25 +247,16 @@ class CircleClient:
             raise
     
     def get_transaction_status(self, transaction_id: str) -> dict:
-        """
-        Get transaction status.
-        
-        Returns:
-            {
-                "state": "PENDING" | "CONFIRMED" | "FAILED",
-                "txHash": "0x...",
-                "confirmations": int
-            }
-        """
+        """Get transaction status."""
         try:
-            url = f"{CIRCLE_API_URL}/transfer/{transaction_id}"
+            url = f"{CIRCLE_API_URL}/w3s/developer/transactions/{transaction_id}"
             response = self.config.client.get(url)
             
             if response.status_code != 200:
                 logger.error(f"Transaction status fetch failed: {response.text}")
                 raise Exception(f"Failed to get transaction status: {response.text}")
             
-            tx = response.json()["data"]
+            tx = response.json()["data"]["transaction"]
             return {
                 "state": tx["state"],
                 "txHash": tx.get("txHash", None),
@@ -225,10 +280,10 @@ def get_circle_client() -> CircleClient:
     entity_secret = os.getenv("CIRCLE_ENTITY_SECRET")
     wallet_set_id = os.getenv("CIRCLE_WALLET_SET_ID")
     
-    if not all([api_key, entity_secret, wallet_set_id]):
+    if not all([api_key, entity_secret]):
         raise ValueError(
-            "Circle credentials not configured. "
-            "Set CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET, CIRCLE_WALLET_SET_ID"
+            "Core Circle credentials not configured. "
+            "Set CIRCLE_API_KEY and CIRCLE_ENTITY_SECRET"
         )
     
     config = CircleWalletConfig(api_key, entity_secret, wallet_set_id)

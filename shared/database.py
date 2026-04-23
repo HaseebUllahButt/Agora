@@ -57,6 +57,7 @@ def init_database():
                 service_type TEXT NOT NULL,
                 description TEXT,
                 price_usdc REAL NOT NULL,
+                endpoint_url TEXT,
                 capacity INTEGER DEFAULT 100,
                 current_load INTEGER DEFAULT 0,
                 version INTEGER DEFAULT 1,
@@ -125,23 +126,23 @@ def create_agent(agent_id: str, name: str, address: str, private_key: str = None
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO agents (id, name, address, private_key, description, capabilities, created_at, updated_at)
+            INSERT OR REPLACE INTO agents (id, name, address, private_key, description, capabilities, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (agent_id, name, address, private_key, description, capabilities, now, now))
         conn.commit()
 
 
 def register_provider(provider_id: str, agent_id: str, name: str, service_type: str, 
-                     description: str, price_usdc: float):
+                     description: str, price_usdc: float, endpoint_url: str = None):
     """Register a new service provider."""
     now = datetime.utcnow().isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO providers 
-            (id, agent_id, name, service_type, description, price_usdc, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (provider_id, agent_id, name, service_type, description, price_usdc, now, now))
+            INSERT OR REPLACE INTO providers 
+            (id, agent_id, name, service_type, description, price_usdc, endpoint_url, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (provider_id, agent_id, name, service_type, description, price_usdc, endpoint_url, now, now))
         conn.commit()
 
 

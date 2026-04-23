@@ -121,7 +121,7 @@ export default function App() {
                     </div>
                     {p.relevance && (
                       <div className="meta-item">
-                        <span className="meta-label">Relevance</span>
+                        <span className="meta-label">Semantic Match</span>
                         <span className="meta-value" style={{ color: 'var(--accent)' }}>{(p.relevance * 100).toFixed(0)}%</span>
                       </div>
                     )}
@@ -185,7 +185,7 @@ export default function App() {
                 <span style={{ color: 'var(--success)' }}> {tx.seller}</span>
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                Amount: ${tx.amount_usdc} USDC • Status: {tx.status}
+                Proof: <span className="hash-preview">{tx.erc8004_proof?.slice(0, 16)}...</span> • {tx.status}
               </div>
             </div>
           ))
