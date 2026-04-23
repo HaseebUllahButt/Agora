@@ -23,22 +23,30 @@ def bootstrap():
     
     load_dotenv(override=True)
     
+    def safe_append(key, value):
+        # Ensure we always start on a newline
+        existing_content = ""
+        if env_path.exists():
+            existing_content = env_path.read_text()
+        
+        with open(env_path, "a") as f:
+            if existing_content and not existing_content.endswith("\n"):
+                f.write("\n")
+            f.write(f"{key}={value}\n")
+        load_dotenv(override=True)
     # 2. Check Core Keys
     api_key = os.getenv("CIRCLE_API_KEY")
     entity_secret = os.getenv("CIRCLE_ENTITY_SECRET")
     
     if not api_key:
         api_key = input("Enter your Circle API Key: ").strip()
-        with open(env_path, "a") as f:
-            f.write(f"CIRCLE_API_KEY={api_key}\n")
+        safe_append("CIRCLE_API_KEY", api_key)
 
     if not entity_secret:
         print("🔄 No CIRCLE_ENTITY_SECRET found. Generating secure master key...")
         import secrets
         entity_secret = secrets.token_hex(32)
-        with open(env_path, "a") as f:
-            # Check for newline before appending
-            f.write(f"CIRCLE_ENTITY_SECRET={entity_secret}\n")
+        safe_append("CIRCLE_ENTITY_SECRET", entity_secret)
         print(f"✅ Generated and saved new Entity Secret.")
 
     # Reload again to ensure os.environ is updated
@@ -55,8 +63,7 @@ def bootstrap():
         try:
             client = get_circle_client()
             new_set_id = client.create_wallet_set(name="Agora_Marketplace_Agents")
-            with open(env_path, "a") as f:
-                f.write(f"\nCIRCLE_WALLET_SET_ID={new_set_id}\n")
+            safe_append("CIRCLE_WALLET_SET_ID", new_set_id)
             print(f"✅ Successfully created and saved Wallet Set ID: {new_set_id}")
         except Exception as e:
             print(f"❌ Failed to create Wallet Set: {e}")
