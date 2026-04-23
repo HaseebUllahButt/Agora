@@ -33,9 +33,13 @@ def bootstrap():
             f.write(f"CIRCLE_API_KEY={api_key}\n")
 
     if not entity_secret:
-        entity_secret = input("Enter your Circle Entity Secret: ").strip()
+        print("🔄 No CIRCLE_ENTITY_SECRET found. Generating secure master key...")
+        import secrets
+        entity_secret = secrets.token_hex(32)
         with open(env_path, "a") as f:
+            # Check for newline before appending
             f.write(f"CIRCLE_ENTITY_SECRET={entity_secret}\n")
+        print(f"✅ Generated and saved new Entity Secret.")
 
     # Reload again to ensure os.environ is updated
     load_dotenv(override=True)
