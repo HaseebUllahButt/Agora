@@ -19,7 +19,7 @@ _redis_client = None
 
 
 def get_redis():
-    """Get or create Redis connection."""
+    """Get Redis connection. Fails if Redis is unavailable (Zero-Slop)."""
     global _redis_client
     if _redis_client is None:
         try:
@@ -35,29 +35,12 @@ def get_redis():
             _redis_client.ping()
             print(f"✓ Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
         except Exception as e:
-            print(f"⚠️  Redis connection failed: {e}")
-            print("   Running with mock in-memory nonce storage")
-            _redis_client = MockRedis()
+            # Production Rule: No mock storage allowed for nonce protection
+            raise ConnectionError(f"CRITICAL: Redis connection failed at {REDIS_HOST}:{REDIS_PORT}. Nonce protection required. {e}")
     return _redis_client
 
 
-class MockRedis:
-    """In-memory mock Redis for local development (no actual Redis needed)."""
-    
-    def __init__(self):
-        self.store = {}
-    
-    def set(self, key, value, nx=False, ex=None):
-        """Mock SET command with NX option."""
-        if nx and key in self.store:
-            # Key exists, NX failed
-            return None
-        self.store[key] = value
-        return True
-    
-    def get(self, key):
-        return self.store.get(key)
-    
+# MockRedis removed - Real world agents require persistent replay protection.
     def delete(self, key):
         if key in self.store:
             del self.store[key]

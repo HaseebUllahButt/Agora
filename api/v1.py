@@ -55,13 +55,10 @@ init_database()
 # ──────────────────────────────────────────────────────────────────────────────
 
 class RegisterAgentRequest(BaseModel):
-    """Register a new agent (wallet) with Circle integration."""
+    """Register info (public only) with the marketplace."""
     agent_id: str  
     name: str
-    private_key: str  
-    circle_api_key: str
-    circle_entity_secret: str
-    circle_wallet_set_id: str
+    address: str # The Arc address (USDC destination)
     description: str = ""
     capabilities: list = []  
 
@@ -89,38 +86,25 @@ class PurchaseServiceRequest(BaseModel):
 @app.post("/agents/register")
 async def register_agent(req: RegisterAgentRequest):
     """
-    Register a new agent in the marketplace with Circle wallet creation.
-    
-    Agent must provide Circle credentials to transact on Arc.
-    A Circle wallet will be created automatically on Arc testnet.
+    Register a new agent in the marketplace registry.
+    Only stores public metadata for discovery and reputation.
     """
     try:
-        from sdk.agent import Agent
-        from sdk.wallet import get_address_from_private_key
-        
-        # Create agent with Circle integration
-        agent = Agent(
+        # Register in local DB
+        create_agent(
             agent_id=req.agent_id,
             name=req.name,
-            private_key=req.private_key,
-            circle_api_key=req.circle_api_key,
-            circle_entity_secret=req.circle_entity_secret,
-            circle_wallet_set_id=req.circle_wallet_set_id,
+            address=req.address,
             description=req.description,
-            capabilities=req.capabilities
+            capabilities=json.dumps(req.capabilities)
         )
         
-        # Register (creates Circle wallet)
-        result = agent.register()
-        
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        
-        return result
-    except HTTPException:
-        raise
+        return {
+            "agent_id": req.agent_id,
+            "status": "registered",
+            "address": req.address
+        }
     except Exception as e:
-
         raise HTTPException(status_code=400, detail=str(e))
 
 

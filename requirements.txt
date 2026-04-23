@@ -5,4 +5,8 @@ python-dotenv
 redis
 eth-keys
 eth-utils
-httpxpycryptodome
+httpx
+pycryptodome
+requests
+websockets
+sqlite3

@@ -11,8 +11,8 @@ import requests
 from typing import Dict, Optional
 from functools import lru_cache
 
-# Arc testnet RPC endpoint
-ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://testnet.arc.gov/rpc")
+# Arc testnet RPC endpoint (Real Testnet URL)
+ARC_RPC_URL = os.getenv("ARC_RPC_URL", "https://rpc.testnet.arc.network")
 ARC_USDC_ADDRESS = os.getenv("ARC_TESTNET_USDC", "0x3600000000000000000000000000000000000000")
 MIN_BALANCE_USDC = float(os.getenv("MIN_BALANCE_USDC", "0.01"))
 
@@ -23,14 +23,8 @@ _CACHE_TTL_SECONDS = 30
 
 def get_balance(address: str) -> Optional[float]:
     """
-    Get USDC balance for wallet address.
+    Get USDC balance for wallet address via Arc RPC.
     Cached with 30-second TTL.
-    
-    Args:
-        address: Wallet address (0x...)
-    
-    Returns:
-        Balance in USDC, or None if check fails
     """
     # Check cache
     if address in _BALANCE_CACHE:
@@ -38,15 +32,29 @@ def get_balance(address: str) -> Optional[float]:
         if time.time() - timestamp < _CACHE_TTL_SECONDS:
             return balance
     
-    # Fetch from RPC (simplified mock for demo)
+    # Real RPC Call to Arc
     try:
-        # In production: call Arc RPC balanceOf()
-        # For demo: just return a non-zero balance (assume funded)
-        balance = 100.0  # Mock: assume 100 USDC
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "eth_call",
+            "params": [{
+                "to": ARC_USDC_ADDRESS,
+                # balanceOf(address) selector: 0x70a08231
+                "data": f"0x70a08231{address[2:].lower().zfill(64)}"
+            }, "latest"],
+            "id": 1
+        }
+        response = requests.post(ARC_RPC_URL, json=payload, timeout=10)
+        response.raise_for_status()
+        
+        result = response.json().get("result", "0x0")
+        # USDC on Arc has 6 decimals
+        balance = int(result, 16) / 10**6
+        
         _BALANCE_CACHE[address] = (balance, time.time())
         return balance
     except Exception as e:
-        print(f"⚠️  Balance check failed for {address}: {e}")
+        print(f"⚠️  RPC Balance check failed for {address}: {e}")
         return None
 
 

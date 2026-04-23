@@ -53,7 +53,7 @@ class AgoraClient:
             agent_id="alice",
             private_key="0xAlicePrivateKey",
             circle_wallet_id="...",
-            circle_api_key="TEST_API_KEY:xxx",
+            circle_api_key=os.getenv("CIRCLE_API_KEY"),
             circle_entity_secret="yyy",
             circle_wallet_set_id="zzz",
             budget_usdc=0.50
@@ -303,19 +303,32 @@ class AgoraClient:
         # Update spent budget
         self.spent_usdc += price
         
-        # In real implementation, would call provider endpoint here
-        # For MVP demo, return mock result
-        result = {
+        # REGISTRY MODEL:
+        # Agora is a SETTLEMENT + REPUTATION LAYER, not a service provider.
+        # 
+        # 1. Buyer sends x402_header (Circle payment proof) to Seller
+        # 2. Seller validates via x402 Facilitator  
+        # 3. Seller delivers service agent-to-agent
+        # 4. Seller claims settlement via Circle Programmable Wallet API
+        # 5. Marketplace records tx for reputation + fraud detection
+        #
+        # No mock results. Real settlement via Circle on Arc.
+        
+        settlement_record = {
             "transaction_id": tx_id,
-            "service_id": provider_id,
-            "amount": price,
-            "timestamp": int(time.time()),
-            "status": "pending_settlement",
+            "buyer_id": self.agent_id,
+            "seller_id": provider_id,
+            "amount_usdc": price,
+            "payment_method": "circle_programmable_wallet",
+            "x402_header": x402_header,
             "nonce": nonce,
-            "x402_header": x402_header
+            "status": "authorized",
+            "settled": False,
+            "timestamp": int(time.time()),
+            "settlement_chain": "arc-testnet"
         }
         
-        return result
+        return settlement_record
     
     def purchase_service(self, seller_id: str, service_name: str, params: Dict = None) -> Dict:
         """

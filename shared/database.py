@@ -114,21 +114,6 @@ def init_database():
             )
         """)
 
-        # Circle credentials table (per-agent Circle integration)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS circle_credentials (
-                agent_id TEXT PRIMARY KEY,
-                api_key TEXT NOT NULL,
-                entity_secret TEXT NOT NULL,
-                wallet_set_id TEXT NOT NULL,
-                circle_wallet_id TEXT,
-                circle_address TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (agent_id) REFERENCES agents(id)
-            )
-        """)
-
         conn.commit()
         print("✓ Database initialized")
 
@@ -281,44 +266,6 @@ def update_agent_reputation(agent_id: str, delta: int, reason: str = None, tx_id
         """, (event_id, agent_id, "score_update", delta, reason, tx_id, now))
         
         conn.commit()
-
-
-def store_circle_credentials(agent_id: str, api_key: str, entity_secret: str, 
-                              wallet_set_id: str, circle_wallet_id: str = None, 
-                              circle_address: str = None):
-    """Store Circle credentials for an agent."""
-    now = datetime.utcnow().isoformat()
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT OR REPLACE INTO circle_credentials 
-            (agent_id, api_key, entity_secret, wallet_set_id, circle_wallet_id, circle_address, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (agent_id, api_key, entity_secret, wallet_set_id, circle_wallet_id, circle_address, now, now))
-        conn.commit()
-
-
-def get_circle_credentials(agent_id: str):
-    """Get Circle credentials for an agent."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM circle_credentials WHERE agent_id = ?", (agent_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-
-
-def update_circle_wallet(agent_id: str, circle_wallet_id: str, circle_address: str):
-    """Update Circle wallet ID and address after creation."""
-    now = datetime.utcnow().isoformat()
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE circle_credentials
-            SET circle_wallet_id = ?, circle_address = ?, updated_at = ?
-            WHERE agent_id = ?
-        """, (circle_wallet_id, circle_address, now, agent_id))
-        conn.commit()
-
 
 
 if __name__ == "__main__":

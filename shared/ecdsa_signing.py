@@ -5,15 +5,19 @@ ECDSA signing and verification for x402 payment headers.
 Uses secp256k1 (Ethereum standard) via eth_keys.
 """
 
+import os
 from eth_keys import keys
 from eth_utils import keccak
 import json
 import hashlib
+import secrets
 
 
 def generate_keypair():
-    """Generate a new ECDSA keypair (secp256k1)."""
-    private_key = keys.PrivateKey(keccak(b"agora"))  # Bad for production, OK for demo
+    """Generate a new secure random ECDSA keypair (secp256k1)."""
+    # Use secrets module for cryptographically secure random private key
+    private_key_bytes = secrets.token_bytes(32)
+    private_key = keys.PrivateKey(private_key_bytes)
     return {
         "private_key_hex": private_key.to_hex(),
         "public_key_hex": private_key.public_key.to_hex(),

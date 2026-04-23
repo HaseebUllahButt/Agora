@@ -1,195 +1,190 @@
 import { useState, useEffect } from 'react'
-import './App.css'
+import './index.css'
 
-// Mock provider data
-const INITIAL_PROVIDERS = {
-  compute: [
-    { id: 'groq', name: 'Groq', category: 'compute', description: 'Llama 3.1 70B - Fast inference', basePrice: 0.0002, dynamicPrice: 0.00023, qualityScore: 4.8, latency: 240, uptime: 99.9, activeRequests: 143 },
-    { id: 'claude', name: 'Claude API', category: 'compute', description: 'Claude 3.5 Sonnet - High quality', basePrice: 0.0005, dynamicPrice: 0.00048, qualityScore: 4.9, latency: 420, uptime: 99.95, activeRequests: 87 },
-    { id: 'gemini', name: 'Google Gemini', category: 'compute', description: 'Gemini 2.0 Flash - Balanced', basePrice: 0.0003, dynamicPrice: 0.00032, qualityScore: 4.7, latency: 380, uptime: 99.8, activeRequests: 120 }
-  ],
-  data: [
-    { id: 'eth-price', name: 'ETH Price Feed', category: 'data', description: 'Real-time Ethereum pricing', basePrice: 0.00008, dynamicPrice: 0.00009, qualityScore: 4.95, latency: 45, uptime: 99.99, activeRequests: 267 },
-    { id: 'weather', name: 'Weather Sensor', category: 'data', description: 'Real-time temperature data', basePrice: 0.00005, dynamicPrice: 0.00005, qualityScore: 4.6, latency: 120, uptime: 99.5, activeRequests: 45 },
-    { id: 'traffic', name: 'Traffic Monitor', category: 'data', description: 'Urban traffic flow data', basePrice: 0.0001, dynamicPrice: 0.00011, qualityScore: 4.4, latency: 250, uptime: 99.2, activeRequests: 98 }
-  ],
-  capability: [
-    { id: 'web-search', name: 'Web Search', category: 'capability', description: 'Credentialed web search + ranking', basePrice: 0.0003, dynamicPrice: 0.00035, qualityScore: 4.7, latency: 890, uptime: 99.7, activeRequests: 154 },
-    { id: 'validator', name: 'Fact Validator', category: 'capability', description: 'Third-party claim verification', basePrice: 0.0008, dynamicPrice: 0.00084, qualityScore: 4.85, latency: 1200, uptime: 99.95, activeRequests: 67 },
-    { id: 'sandbox', name: 'Code Sandbox', category: 'capability', description: 'Secure Python code execution', basePrice: 0.001, dynamicPrice: 0.00098, qualityScore: 4.6, latency: 1450, uptime: 99.6, activeRequests: 58 }
-  ]
-}
+const API_BASE = "http://localhost:8000"
 
 export default function App() {
-  const [category, setCategory] = useState('compute')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortBy, setSortBy] = useState('price')
+  const [view, setView] = useState('market') // market, agents, orchestrator
   const [providers, setProviders] = useState([])
+  const [transactions, setTransactions] = useState([])
+  const [loading, setLoading] = useState(true)
+  
+  // Registration Form State
+  const [regForm, setRegForm] = useState({
+    id: '', name: '', description: '', capabilities: ''
+  })
 
-  // Initialize
+  // Fetch providers from live API
   useEffect(() => {
-    const all = [...INITIAL_PROVIDERS.compute, ...INITIAL_PROVIDERS.data, ...INITIAL_PROVIDERS.capability]
-    setProviders(all)
-  }, [])
-
-  // Update prices every 3 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setProviders(prevProviders =>
-        prevProviders.map(p => ({
-          ...p,
-          dynamicPrice: Math.round((p.basePrice * (0.9 + Math.random() * 0.2)) * 1000000) / 1000000,
-          activeRequests: Math.max(20, p.activeRequests + Math.floor((Math.random() - 0.5) * 30))
-        }))
-      )
-    }, 3000)
+    fetchProviders()
+    const interval = setInterval(fetchProviders, 10000)
     return () => clearInterval(interval)
   }, [])
 
+  const fetchProviders = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/services/search`)
+      const data = await resp.json()
+      setProviders(data)
+      setLoading(false)
+    } catch (err) {
+      console.error("API Fetch failed:", err)
+    }
+  }
 
+  // WebSocket for real-time transaction feed
+  useEffect(() => {
+    const ws = new WebSocket(`ws://localhost:8000/ws`)
+    ws.onmessage = (event) => {
+      const tx = JSON.parse(event.data)
+      setTransactions(prev => [tx, ...prev].slice(0, 20))
+    }
+    return () => ws.close()
+  }, [])
 
-  // Filter and sort
-  const filtered = providers
-    .filter(p => p.category === category)
-    .filter(p => 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'price': return a.dynamicPrice - b.dynamicPrice
-        case 'quality': return b.qualityScore - a.qualityScore
-        case 'latency': return a.latency - b.latency
-        default: return 0
-      }
-    })
-
-  const stats = {
-    total: providers.length,
-    active: providers.filter(p => p.uptime > 99).length,
-    avgQuality: (providers.reduce((s, p) => s + p.qualityScore, 0) / providers.length).toFixed(1)
+  const handleRegister = async (e) => {
+    e.preventDefault()
+    // In a real product, the SDK would do this locally.
+    // For the UI demo, we show the intention.
+    alert(`Registering ${regForm.name} on Arc... Wallet creation initiated locally.`)
+    // Mock successful registration
+    setView('market')
   }
 
   return (
-    <div className="app">
-      {/* Header */}
-      <header className="header">
-        <div className="header-container">
-          <div>
-            <h1>AGORA</h1>
-            <p className="subtitle">Agent-to-Agent Marketplace for Arc USDC</p>
+    <div className="layout">
+      {/* Sidebar Navigation */}
+      <nav className="sidebar">
+        <div className="logo">AGORA</div>
+        
+        <div className={`nav-item ${view === 'market' ? 'active' : ''}`} onClick={() => setView('market')}>
+          Marketplace
+        </div>
+        <div className={`nav-item ${view === 'agents' ? 'active' : ''}`} onClick={() => setView('agents')}>
+          My Agents
+        </div>
+        <div className={`nav-item ${view === 'orchestrator' ? 'active' : ''}`} onClick={() => setView('orchestrator')}>
+          Orchestrator
+        </div>
+
+        <div style={{ marginTop: 'auto' }}>
+          <div className="nav-item" style={{ fontSize: '12px' }}>
+            Arc Testnet: 5042002
           </div>
-          <div className="header-stats">
-            <div className="stat">
-              <div className="stat-value">{stats.total}</div>
-              <div className="stat-label">Providers</div>
+        </div>
+      </nav>
+
+      {/* Main Viewport */}
+      <main className="main-content">
+        <div className="header-row">
+          <div>
+            <h1>{view === 'market' ? 'Agent Market' : view === 'agents' ? 'My Portfolio' : 'AI Orchestration'}</h1>
+            <p style={{ color: 'var(--text-dim)' }}>
+              {view === 'market' ? 'Discover specialized agents on the Arc chain.' : 
+               view === 'agents' ? 'Manage your local wallets and merchant earnings.' : 
+               'Assign complex tasks to the Agora Guide.'}
+            </p>
+          </div>
+
+          <div className="stats-bar">
+            <div className="stat-card">
+              <div className="stat-label">Network</div>
+              <div className="stat-value" style={{ color: 'var(--accent)' }}>ARC-TEST</div>
             </div>
-            <div className="stat">
-              <div className="stat-value">{stats.active}</div>
-              <div className="stat-label">Active</div>
-            </div>
-            <div className="stat">
-              <div className="stat-value">{stats.avgQuality}★</div>
-              <div className="stat-label">Avg Quality</div>
+            <div className="stat-card">
+              <div className="stat-label">Active Agents</div>
+              <div className="stat-value">{providers.length}</div>
             </div>
           </div>
         </div>
-      </header>
 
-      <div className="container">
-        {/* Sidebar */}
-        <aside className="sidebar">
-          <div className="sidebar-section">
-            <h3>Category</h3>
-            {['compute', 'data', 'capability'].map(cat => (
-              <button
-                key={cat}
-                className={`category-button ${category === cat ? 'active' : ''}`}
-                onClick={() => setCategory(cat)}
-              >
-                {cat.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          <hr />
-
-          <div className="sidebar-section">
-            <h3>Sort</h3>
-            {[
-              { label: 'Price (Low)', value: 'price' },
-              { label: 'Quality', value: 'quality' },
-              { label: 'Latency', value: 'latency' }
-            ].map(opt => (
-              <label key={opt.value} className="radio-label">
-                <input 
-                  type="radio" 
-                  name="sort" 
-                  value={opt.value} 
-                  checked={sortBy === opt.value}
-                  onChange={(e) => setSortBy(e.target.value)}
-                />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </aside>
-
-        {/* Main */}
-        <main className="main">
-          {/* Search */}
-          <div className="search-box">
-            <input
-              type="text"
-              placeholder="Search providers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          {/* Provider Grid */}
-          <section className="grid-section">
-            <h2>Available Providers ({filtered.length})</h2>
-            <div className="provider-grid">
-              {filtered.map(p => (
-                <div key={p.id} className="provider-card">
-                  <div className="card-header">
-                    <h3>{p.name}</h3>
-                    <span className="quality-badge">{p.qualityScore.toFixed(1)}★</span>
-                  </div>
-                  <p className="card-description">{p.description}</p>
-                  <div className="card-metrics">
-                    <div className="metric">
-                      <span className="metric-label">Price</span>
-                      <span className="metric-value">${p.dynamicPrice.toFixed(6)}</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Latency</span>
-                      <span className="metric-value">{p.latency}ms</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Uptime</span>
-                      <span className="metric-value">{p.uptime}%</span>
-                    </div>
-                    <div className="metric">
-                      <span className="metric-label">Requests</span>
-                      <span className="metric-value">{p.activeRequests}</span>
-                    </div>
-                  </div>
-                  <button className="select-button">Select Provider</button>
+        {/* View Switcher */}
+        {view === 'market' && (
+          <section className="grid-container">
+            {loading ? <p>Waking up agents...</p> : 
+             providers.map(p => (
+              <div key={p.provider_id} className="glass-panel provider-card">
+                <div className="card-top">
+                  <h3 className="card-title">{p.name}</h3>
+                  <div className="price-tag">${p.price.toFixed(6)} USDC</div>
                 </div>
-              ))}
-            </div>
+                <div className="card-body">
+                  <p>{p.description || "No description provided."}</p>
+                  <div className="card-meta">
+                    <div className="meta-item">
+                      <span className="meta-label">Seller</span>
+                      <span className="meta-value">{p.agent}</span>
+                    </div>
+                    <div className="meta-item">
+                      <span className="meta-label">Reputation</span>
+                      <span className="meta-value" style={{ color: 'var(--success)' }}>{p.reputation} GXP</span>
+                    </div>
+                  </div>
+                  <button className="btn-action">Select Service</button>
+                </div>
+              </div>
+            ))}
           </section>
+        )}
 
+        {view === 'agents' && (
+          <div style={{ maxWidth: '600px' }}>
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <h2 style={{ marginBottom: '24px' }}>Register New Agent</h2>
+              <form onSubmit={handleRegister}>
+                <div className="form-group">
+                  <label>Agent Name</label>
+                  <input type="text" placeholder="e.g. DataAnalyzer_Bot" value={regForm.name} onChange={e => setRegForm({...regForm, name: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea rows="3" placeholder="What does this agent do?" value={regForm.description} onChange={e => setRegForm({...regForm, description: e.target.value})} />
+                </div>
+                <button type="submit" className="btn-action">Create Local Wallet & Register</button>
+              </form>
+            </div>
+          </div>
+        )}
 
-        </main>
-      </div>
+        {view === 'orchestrator' && (
+          <div className="glass-panel" style={{ padding: '40px', textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '20px' }}>🧠</div>
+            <h2>Agora Guide</h2>
+            <p style={{ color: 'var(--text-dim)', marginBottom: '32px' }}>
+              I will find agents, organize the workflow, and settle payments for you.
+            </p>
+            <div className="form-group" style={{ textAlign: 'left' }}>
+              <label>What is your task?</label>
+              <textarea 
+                rows="4" 
+                style={{ fontSize: '18px' }} 
+                placeholder="e.g. Find recent news about Circle and summarize the key findings." 
+              />
+            </div>
+            <button className="btn-action" style={{ maxWidth: '300px' }}>Fund Task with $0.10 USDC</button>
+          </div>
+        )}
+      </main>
 
-      {/* Footer */}
-      <footer className="footer">
-        <p>Arc Testnet • x402 Payments • Circle Nanopayments • Sub-cent Transactions</p>
-      </footer>
+      {/* Transaction Feed Sidebar */}
+      <aside className="feed-aside">
+        <h3 style={{ margin: '0 0 20px 0', fontSize: '14px', letterSpacing: '0.1em' }}>LIVE SETTLEMENT FEED</h3>
+        {transactions.length === 0 ? <p style={{ color: 'var(--text-dim)', fontSize: '12px' }}>Awaiting on-chain activity...</p> : 
+          transactions.map((tx, i) => (
+            <div key={i} className="feed-item">
+              <div className="feed-tx">TX: {tx.tx_id}</div>
+              <div style={{ margin: '4px 0' }}>
+                <span style={{ color: 'var(--accent)' }}>{tx.buyer}</span> purchased 
+                <span style={{ color: '#fff' }}> {tx.service_name}</span> from 
+                <span style={{ color: 'var(--success)' }}> {tx.seller}</span>
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                Amount: ${tx.amount_usdc} USDC • Status: {tx.status}
+              </div>
+            </div>
+          ))
+        }
+      </aside>
     </div>
   )
 }
