@@ -40,15 +40,6 @@ def get_redis():
     return _redis_client
 
 
-# MockRedis removed - Real world agents require persistent replay protection.
-    def delete(self, key):
-        if key in self.store:
-            del self.store[key]
-        return True
-    
-    def ping(self):
-        return True
-
 
 def register_nonce(agent_id: str, nonce: str) -> tuple[bool, str]:
     """

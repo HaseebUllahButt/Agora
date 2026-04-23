@@ -231,20 +231,20 @@ def update_transaction_status(tx_id: str, status: str, arc_tx_hash: str = None):
         conn.commit()
 
 
-def record_service_result(tx_id: str, result: str):
-    """Record service execution result (JSON stringified)."""
+def record_service_result(tx_id: str, result: str, proof_hash: str = None):
+    """Record service execution result (JSON stringified) and cryptographic proof."""
     now = datetime.utcnow().isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
             UPDATE transactions
-            SET result = ?, service_delivered = 1, updated_at = ?
+            SET result = ?, proof_of_service_hash = ?, service_delivered = 1, updated_at = ?
             WHERE id = ?
-        """, (result, now, tx_id))
+        """, (result, proof_hash, now, tx_id))
         conn.commit()
 
-def update_agent_reputation(agent_id: str, delta: int, reason: str = None, tx_id: str = None):
-    """Update agent's reputation score."""
+def update_agent_reputation(agent_id: str, delta: int, reason: str = None, tx_id: str = None, proof_hash: str = None):
+    """Update agent's reputation score with cryptographic proof (ERC-8004 alignment)."""
     now = datetime.utcnow().isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
@@ -257,6 +257,10 @@ def update_agent_reputation(agent_id: str, delta: int, reason: str = None, tx_id
             WHERE id = ?
         """, (delta, now, agent_id))
         
+        # If there's a cryptographic proof of service, append to reason
+        if proof_hash:
+            reason = f"{reason} | Proof: {proof_hash}"
+
         # Log event
         import uuid
         event_id = str(uuid.uuid4())[:8]

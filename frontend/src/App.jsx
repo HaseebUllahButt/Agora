@@ -119,6 +119,12 @@ export default function App() {
                       <span className="meta-label">Reputation</span>
                       <span className="meta-value" style={{ color: 'var(--success)' }}>{p.reputation} GXP</span>
                     </div>
+                    {p.relevance && (
+                      <div className="meta-item">
+                        <span className="meta-label">Relevance</span>
+                        <span className="meta-value" style={{ color: 'var(--accent)' }}>{(p.relevance * 100).toFixed(0)}%</span>
+                      </div>
+                    )}
                   </div>
                   <button className="btn-action">Select Service</button>
                 </div>

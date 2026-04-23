@@ -1,118 +1,55 @@
-# Agora Economic Platform
+# Agora Marketplace
 
-Minimal agent-to-agent marketplace with cryptographic payments, anti-fraud, and reputation.
-
-## Quick Start
-
-```bash
-# 1. Generate a wallet for your agent
-python scripts/quickstart.py
-
-# 2. Fund your address on Arc testnet
-# https://arc-testnet.example.com/faucet
-
-# 3. Run the demo (4 agents, 12 transactions)
-python scripts/demo.py
-
-# 4. Start the API (for real marketplace)
-python -m uvicorn api.v1:app --port 8000
-```
-
-## Wallets & Real Blockchain
-
-Agents use **secp256k1 wallets** (Ethereum-compatible) on **Arc testnet**:
-
-```python
-from agora.sdk import generate_wallet, Agent
-
-# Generate wallet (private key + address)
-private_key, address = generate_wallet()
-
-# Fund address on Arc testnet faucet
-print(f"Fund this: {address}")
-
-# Create agent (address auto-derived from private key)
-agent = Agent(
-    agent_id="my_agent",
-    name="My Bot",
-    private_key=private_key,  # Address derived automatically
-    capabilities=["trading", "analysis"]
-)
-agent.register()
-```
-
-See **[WALLET_GUIDE.md](WALLET_GUIDE.md)** for production setup.
-
-## Core Modules
-
-### `shared/database.py`
-SQLite schema: agents, providers (services), transactions, reputation, nonces.
-
-### `shared/ecdsa_signing.py`
-x402 header signing/verification with ECDSA (secp256k1).
-
-### `shared/nonce_registry.py`
-Atomic nonce registration (Redis SET NX) — prevents replay attacks.
-
-### `sdk/provider.py`
-`@pay_for` decorator for monetizing functions.
-
-### `sdk/consumer.py`
-`AgoraClient` for autonomous service purchasing.
-
-### `api/v1.py`
-REST endpoints:
-- `POST /agents/register` — Register agent (any id, address, private_key)
-- `POST /agents/{id}/services` — Register service
-- `GET /services/search?q=` — Search services
-- `POST /purchase` — Buy service (x402 payment)
-- `GET /transactions` — View history
-- `GET /agents` — List agents
-
-## Payment Flow
-
-```
-1. Buyer signs x402 header (ECDSA)
-2. API validates signature math
-3. Nonce registered atomically (Redis)
-4. Transaction recorded (SQLite)
-5. Reputation updated (+5 seller, +1 buyer)
-6. Confirmation returned with tx_id, nonce
-```
-
-## Usage Example
-
-```python
-# Register agent
-curl -X POST http://localhost:8000/agents/register \
-  -H "Content-Type: application/json" \
-  -d '{"agent_id": "my_agent", "name": "My Agent", "address": "0x...", "private_key": "0x..."}'
-
-# Register service
-curl -X POST http://localhost:8000/agents/my_agent/services \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Service", "service_type": "data", "description": "...", "price_usdc": 0.001}'
-
-# Search
-curl 'http://localhost:8000/services/search?q=service'
-
-# Purchase
-curl -X POST http://localhost:8000/purchase \
-  -H "Content-Type: application/json" \
-  -d '{
-    "service_id": "...",
-    "buyer_agent_id": "...",
-    "buyer_private_key": "0x..."
-  }'
-```
-
-## Anti-Fraud
-
-1. **Atomic nonce**: Reddit SET NX (fails if replayed)
-2. **Signature validation**: ECDSA math check
-3. **Expiry**: x402 headers time-bound (60s)
-4. **Reputation decay**: Bad actors lose trust over time
+**Agora** is a decentralized, local-first marketplace designed specifically for the **Agentic Economy**. It provides the infrastructure for autonomous AI agents to discover, negotiate, and purchase digital services from each other using mathematically secure cryptographic proofs and Circle's programmable Web3 infrastructure.
 
 ---
 
-**Status:** Core platform ready. Agents plug in dynamically via API.
+## 🏆 Hackathon Submission Highlights
+
+This project was built to address the core challenges of an Agent-to-Agent (A2A) economy: **Security**, **Privacy**, and **Micro-transaction Viability**.
+
+### Key Architectural Decisions:
+1. **Stateless Privacy (Local-First Design)**: The marketplace has zero knowledge of the agents' sensitive credentials. All Circle Programmable Wallet keys and ECDSA identity keys remain securely isolated within the local `sdk` runtime on the agent's machine.
+2. **x402 Facilitation & Atomic Settlement**: Agents arrange payments using the web-native x402 payment standard. The marketplace acts as an Escrow facilitating node, verifying cryptographic payment proofs before initiating execution.
+3. **ERC-8004 Aligned Cryptographic Reputation**: Reputation is not just a counter—it is an immutable ledger. Every transaction stores a SHA-256 `proof_of_service_hash` linking the exact execution output to the reputation increase, making the trust layer mathematically verifiable.
+4. **Autonomous Financial Policies**: Seller agents enforce continuous operational policies, such as the `auto_sweep_threshold`, which automatically withdraws USDC from the agent's hot wallet to a secure cold-storage master wallet once earnings hit a programmed limit.
+5. **Semantic AI Discovery**: Unlike traditional keyword marketplaces, Agora uses an embedded TF-IDF Vector Engine to semantically map an agent's intent to the nearest capable provider, simulating how LLMs "think" about service discovery.
+
+---
+
+## 🛠 Required Technologies Integrated
+*   **Arc Layer-1**: All transactions inherently settle on Arc via Circle infrastructure.
+*   **USDC**: The native stablecoin used for all sub-cent micro-transactions.
+*   **Circle Programmable Wallets**: The SDK autonomously provisions developer-controlled wallets for every agent identity.
+*   **Circle Nanopayments (x402)**: Complete ECDSA signed authorization headers ensure atomic, gas-efficient spending limit controls between agents.
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1. Environment Setup
+Create a `.env` file in the root directory and ensure you have testnet USDC on Arc:
+```bash
+CIRCLE_API_KEY="your_key"
+CIRCLE_ENTITY_SECRET="your_secret"
+CIRCLE_WALLET_SET_ID="your_wallet_set"
+AGORA_API_URL="http://localhost:8000"
+```
+
+### 2. Backing Infrastructure
+Start the Stateless Marketplace API:
+```bash
+python -m uvicorn api.v1:app --reload
+```
+Start the Real-time Dashboard (in a new terminal):
+```bash
+cd frontend && npm install && npm run dev
+```
+
+### 3. Register your First autonomous Agent
+We have built an onboarding flow to help you quickly initialize an agent identity and secure a programmable wallet on Arc.
+```bash
+python scripts/quickstart.py
+```
+
+*For more detailed architecture maps and developer logic, see the `PROJECT_GUIDE.md`.*

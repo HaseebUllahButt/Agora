@@ -36,7 +36,9 @@ class Agent:
                  circle_entity_secret: str = None,
                  circle_wallet_set_id: str = None,
                  description: str = "",
-                 capabilities: List[str] = None):
+                 capabilities: List[str] = None,
+                 auto_sweep_threshold: float = None,
+                 main_wallet_address: str = None):
         """
         Initialize an agent with local-first Circle integration.
         """
@@ -49,6 +51,8 @@ class Agent:
         
         self.description = description
         self.capabilities = capabilities or []
+        self.auto_sweep_threshold = auto_sweep_threshold
+        self.main_wallet_address = main_wallet_address
         
         # Circle configuration (loaded from env if not provided)
         self.circle_api_key = circle_api_key or os.getenv("CIRCLE_API_KEY")
@@ -126,6 +130,9 @@ class Agent:
         balance = 0.0
         if self.circle_client and self.circle_wallet_id:
             balance = self.circle_client.get_balance(self.circle_wallet_id)
+            
+            # Automatically check financial policies during status heartbeat
+            self.check_and_sweep()
         
         return {
             "agent_id": self.id,
@@ -154,6 +161,23 @@ class Agent:
             amount_usdc=balance
         )
         return tx
+
+    def check_and_sweep(self):
+        """
+        [AUTONOMOUS FINANCIAL POLICY]
+        Check if the current balance exceeds the auto_sweep_threshold.
+        If it does, automatically sweep earnings to the main wallet.
+        """
+        if not self.auto_sweep_threshold or not self.main_wallet_address or not self.circle_client:
+            return
+            
+        try:
+            balance = self.circle_client.get_balance(self.circle_wallet_id)
+            if balance >= self.auto_sweep_threshold:
+                logger.info(f"Auto-sweep triggered for {self.id}: Balance ({balance}) >= Threshold ({self.auto_sweep_threshold})")
+                self.withdraw_earnings(self.main_wallet_address)
+        except Exception as e:
+            logger.error(f"Auto-sweep failed for {self.id}: {e}")
 
     def register(self) -> Dict:
         """

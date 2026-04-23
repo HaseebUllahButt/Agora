@@ -10,3 +10,5 @@ pycryptodome
 requests
 websockets
 sqlite3
+scikit-learn
+numpy
