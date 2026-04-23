@@ -80,12 +80,7 @@ class CircleClient:
             raise
 
     def create_wallet_set(self, name: str) -> str:
-        """
-        Create a new Developer-Controlled Wallet Set.
-        
-        Returns:
-            The new walletSetId (UUID string)
-        """
+        """Create a new developer-controlled wallet set."""
         try:
             idempotency_key = str(uuid.uuid4())
             payload = {
