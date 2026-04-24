@@ -18,6 +18,17 @@ def get_db():
     """Context manager for database connections."""
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+    
+    # Proactive check: If DB was wiped while server is running, recreate tables
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'")
+        if not cursor.fetchone():
+            from shared.database import init_database
+            init_database()
+    except:
+        pass
+        
     try:
         yield conn
     finally:
@@ -35,7 +46,6 @@ def init_database():
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 address TEXT UNIQUE NOT NULL,
-                private_key TEXT,
                 description TEXT,
                 capabilities TEXT,
                 reputation_score INTEGER DEFAULT 100,
@@ -119,16 +129,16 @@ def init_database():
         print("✓ Database initialized")
 
 
-def create_agent(agent_id: str, name: str, address: str, private_key: str = None,
+def create_agent(agent_id: str, name: str, address: str,
                  description: str = None, capabilities: str = None):
     """Create a new agent."""
     now = datetime.utcnow().isoformat()
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT OR REPLACE INTO agents (id, name, address, private_key, description, capabilities, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (agent_id, name, address, private_key, description, capabilities, now, now))
+            INSERT OR REPLACE INTO agents (id, name, address, description, capabilities, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (agent_id, name, address, description, capabilities, now, now))
         conn.commit()
 
 

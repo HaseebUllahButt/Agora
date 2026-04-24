@@ -27,16 +27,15 @@ def generate_keypair():
 
 def create_payload_hash(amount_usdc: float, sender: str, recipient: str, 
                         nonce: str, expiry_timestamp: int) -> str:
-    """Create SHA256 hash of payment payload."""
-    payload = {
-        "amount_usdc": amount_usdc,
-        "sender": sender.lower(),
-        "recipient": recipient.lower(),
-        "nonce": nonce,
-        "expiry": expiry_timestamp
-    }
-    payload_json = json.dumps(payload, sort_keys=True)
-    return hashlib.sha256(payload_json.encode()).hexdigest()
+    """
+    Create a deterministic SHA256 hash of the payment payload.
+    Uses a stable colon-separated format to avoid JSON serialization quirks.
+    """
+    # Format amount to exactly 6 decimal places for deterministic stringification
+    amount_str = "{:.6f}".format(float(amount_usdc))
+    
+    payload = f"{amount_str}:{sender.lower()}:{recipient.lower()}:{nonce}:{expiry_timestamp}"
+    return hashlib.sha256(payload.encode()).hexdigest()
 
 
 def sign_x402_header(private_key_hex: str, amount_usdc: float, sender: str, 
@@ -107,7 +106,7 @@ def verify_x402_signature(header: dict) -> bool:
         sig_bytes = bytes.fromhex(header["signature"].replace("0x", ""))
         sig = keys.Signature(sig_bytes)
         
-        recovered_pubkey = sig.recover_public_key(message_bytes)
+        recovered_pubkey = sig.recover_public_key_from_msg(message_bytes)
         recovered_address = recovered_pubkey.to_checksum_address()
         
         # Check if recovered address matches sender

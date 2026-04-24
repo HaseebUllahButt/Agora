@@ -29,10 +29,11 @@ class ServiceRegistry:
         self._services: Dict[str, Dict[str, Any]] = {}
     
     def register(self, service_id: str, name: str, func: Callable, 
-                 price: float, category: str, description: str):
+                 price: float, category: str, description: str, agent_id: str = None):
         """Register a callable service."""
         self._services[service_id] = {
             "id": service_id,
+            "agent_id": agent_id, # Link back to the seller
             "name": name,
             "function": func,
             "price": price,

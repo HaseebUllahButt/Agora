@@ -20,8 +20,11 @@ import uuid
 import time
 import json
 import hashlib
+import logging
 from datetime import datetime
 from typing import Any, Optional
+
+logger = logging.getLogger("agora.api")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -29,6 +32,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+# Load environment before anything else
+load_dotenv()
 
 from shared.database import (
     init_database, create_agent, register_provider, get_all_providers,
@@ -41,9 +47,21 @@ from shared.nonce_registry import register_nonce
 from shared.arc_client import has_sufficient_balance
 from shared.event_bus import get_event_bus
 from shared.search_engine import get_search_engine
+from shared.circle_client import CircleClient, CircleWalletConfig
 from sdk.provider import get_service_registry, call_service
 
-load_dotenv()
+# Initialize Circle infrastructure for server-side settlement
+circle_api_key = os.getenv("CIRCLE_API_KEY")
+circle_entity_secret = os.getenv("CIRCLE_ENTITY_SECRET")
+circle_wallet_set_id = os.getenv("CIRCLE_WALLET_SET_ID")
+
+if not all([circle_api_key, circle_entity_secret]):
+    # Fallback/warning if not configured
+    print("⚠️  Warning: CIRCLE_API_KEY or CIRCLE_ENTITY_SECRET missing. Settlement will be skipped.")
+    circle_client = None
+else:
+    circle_config = CircleWalletConfig(circle_api_key, circle_entity_secret, circle_wallet_set_id)
+    circle_client = CircleClient(circle_config)
 
 app = FastAPI(title="Agora Marketplace", version="1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -75,10 +93,11 @@ class RegisterServiceRequest(BaseModel):
 
 
 class PurchaseServiceRequest(BaseModel):
-    """Buy a service."""
+    """Buy a service with cryptographic proof of payment."""
     service_id: str  
     buyer_agent_id: str
-    buyer_private_key: str  
+    circle_wallet_id: str # The buyer's source wallet ID
+    x402_header: dict # The ECDSA signed payment proof (dictionary)
     params: dict = {}  
 
 
@@ -87,7 +106,7 @@ class PurchaseServiceRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.post("/agents/register")
-async def register_agent(req: RegisterAgentRequest):
+def register_agent(req: RegisterAgentRequest):
     """
     Register a new agent in the marketplace registry.
     Only stores public metadata for discovery and reputation.
@@ -108,11 +127,13 @@ async def register_agent(req: RegisterAgentRequest):
             "address": req.address
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/agents")
-async def list_agents():
+def list_agents():
     """List all registered agents."""
     from shared.database import get_db
     with get_db() as conn:
@@ -131,7 +152,7 @@ async def list_agents():
 
 
 @app.delete("/agents/{agent_id}")
-async def unregister_agent(agent_id: str):
+def unregister_agent(agent_id: str):
     """Remove an agent and their services from the marketplace."""
     from shared.database import get_db
     with get_db() as conn:
@@ -147,7 +168,7 @@ async def unregister_agent(agent_id: str):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.post("/agents/{agent_id}/services")
-async def register_service(agent_id: str, req: RegisterServiceRequest):
+def register_service(agent_id: str, req: RegisterServiceRequest):
     """Register a service offered by an agent."""
     # Verify agent exists
     agent = get_agent(agent_id)
@@ -163,11 +184,27 @@ async def register_service(agent_id: str, req: RegisterServiceRequest):
         register_provider(
             provider_id=provider_id,
             agent_id=agent_id,
+            name=req.name,
             service_type=req.service_type,
             description=req.description,
             price_usdc=req.price_usdc,
             endpoint_url=req.endpoint_url
         )
+        
+        # ALSO: Update the in-memory ServiceRegistry so /purchase can find it
+        def dummy_service(*args, **kwargs):
+            return {"status": "executed", "service": req.name}
+            
+        get_service_registry().register(
+            service_id=provider_id,
+            agent_id=agent_id, # CRITICAL: Pass the agent_id here!
+            name=req.name,
+            func=dummy_service,
+            price=req.price_usdc,
+            category=req.service_type,
+            description=req.description
+        )
+        
         return {
             "provider_id": provider_id,
             "agent_id": agent_id,
@@ -176,11 +213,13 @@ async def register_service(agent_id: str, req: RegisterServiceRequest):
             "status": "registered"
         }
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/agents/{agent_id}/services")
-async def list_agent_services(agent_id: str):
+def list_agent_services(agent_id: str):
     """List all services offered by an agent."""
     from shared.database import get_db
     with get_db() as conn:
@@ -203,7 +242,7 @@ async def list_agent_services(agent_id: str):
 
 
 @app.get("/services/search")
-async def search_services(q: str = ""):
+def search_services(q: str = ""):
     """Search for services using Vector Search (Semantic matching)."""
     # 1. Get all providers from DB
     all_providers = get_all_providers()
@@ -247,7 +286,7 @@ async def search_services(q: str = ""):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.post("/purchase")
-async def purchase_service(req: PurchaseServiceRequest):
+def purchase_service(req: PurchaseServiceRequest):
     """
     Core marketplace: Buy + Execute + Settle
     
@@ -281,72 +320,59 @@ async def purchase_service(req: PurchaseServiceRequest):
         raise HTTPException(status_code=404, detail=f"Seller agent {seller_agent_id} not found")
     
     # Step 3: Validate x402 payment header
-    nonce = str(uuid.uuid4())
-    expiry = int(time.time()) + 60
+    is_valid, reason = validate_x402_header(req.x402_header, seller_agent["address"])
+    if not is_valid:
+        raise HTTPException(status_code=401, detail=f"Invalid payment signature: {reason}")
     
-    # Build x402 payload
-    from shared.ecdsa_signing import sign_x402_header
-    try:
-        x402_header = sign_x402_header(
-            private_key_hex=req.buyer_private_key,
-            amount_usdc=price,
-            sender=buyer_agent["address"],
-            recipient=seller_agent["address"],
-            nonce=nonce,
-            expiry_timestamp=expiry
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to sign x402 header: {str(e)}")
-    
-    # Validate the header
-    valid, reason = validate_x402_header(x402_header, seller_agent["address"])
-    if not valid:
-        raise HTTPException(status_code=401, detail=f"Payment validation failed: {reason}")
-    
-    # Pre-verify buyer has sufficient balance
-    has_balance = has_sufficient_balance(buyer_agent["address"], price)
-    if not has_balance:
-        raise HTTPException(status_code=402, detail=f"Insufficient balance. Required: ${price:.6f}")
-    
-    # Step 4: Register nonce atomically
-    nonce_ok, nonce_msg = register_nonce(req.buyer_agent_id, nonce)
-    if not nonce_ok:
-        raise HTTPException(status_code=409, detail=f"Nonce check failed: {nonce_msg}")
-    
-    # Step 5: Execute service function
+    # Fraud Prevention: Ensure signed amount matches service price
+    signed_amount = req.x402_header.get("amount")
+    if abs(signed_amount - price) > 0.000001:
+        raise HTTPException(status_code=400, detail=f"Price mismatch. Header: {signed_amount}, Registry: {price}")
+
+    # Extract data from validated header
+    nonce = req.x402_header.get("nonce", str(uuid.uuid4()))
+
+    # Step 4: Settle payment on-chain via Circle (Server-Side)
+    if circle_client:
+        try:
+            logger.info(f"Settle {price} USDC from {req.circle_wallet_id} to {seller_agent['address']}...")
+            tx_result = circle_client.transfer_usdc(
+                from_wallet_id=req.circle_wallet_id,
+                to_address=seller_agent["address"],
+                amount_usdc=price,
+                idempotency_key=str(uuid.uuid4())
+            )
+            circle_tx_id = tx_result.get("transaction_id", "STUB")
+        except Exception as e:
+            logger.error(f"On-chain settlement failed: {e}")
+            raise HTTPException(status_code=502, detail=f"Blockchain settlement failed: {str(e)}")
+    else:
+        # Demo mode: no Circle keys — record the intent, skip on-chain transfer
+        logger.warning(f"⚠️  Demo mode: skipping on-chain settlement for {price} USDC (no Circle client)")
+        circle_tx_id = f"DEMO-{str(uuid.uuid4())[:8]}"
+
+    # Step 5: Execute service function (Verified Payment path)
     tx_id = str(uuid.uuid4())[:8]
     service_result: Optional[Any] = None
     
     try:
-        # Secure Proxy: Only call the real service if payment was verified
         endpoint = service_meta.get("endpoint_url")
-        
         if endpoint:
-            try:
-                import requests
-                # Forward the request parameters to the agent's real endpoint
-                proxy_resp = requests.post(
-                    endpoint, 
-                    json=req.params,
-                    timeout=10,
-                    headers={"X-Agora-Gateway": "Verified-Payment"}
-                )
-                if proxy_resp.status_code == 200:
-                    service_result = proxy_resp.json()
-                else:
-                    service_result = {"error": f"Service provider returned error: {proxy_resp.status_code}"}
-            except Exception as e:
-                service_result = {"error": "Could not connect to service provider"}
+            import requests
+            proxy_resp = requests.post(
+                endpoint, 
+                json=req.params,
+                timeout=10,
+                headers={"X-Agora-Gateway": "Verified-Payment", "X-Circle-TX": circle_tx_id}
+            )
+            service_result = proxy_resp.json() if proxy_resp.status_code == 200 else {"error": "Service failed"}
         else:
-            # Fallback for demo/placeholder services
-            service_result = {"message": f"Demonstration result for {service_meta['name']}"}
+            service_result = {"message": f"Execution proof for {service_meta['name']}", "status": "delivered"}
         
         execution_status = "success"
     except Exception as e:
         execution_status = "failed"
-        service_result = {"error": "Service execution failed"}
-        raise HTTPException(status_code=500, detail="Service execution failed")
-    
+        service_result = {"error": str(e)}
     # Step 6: Record transaction + result
     record_transaction(
         tx_id=tx_id,
@@ -404,7 +430,7 @@ async def purchase_service(req: PurchaseServiceRequest):
 
 
 @app.get("/transactions")
-async def list_transactions():
+def list_transactions():
     """Get transaction history."""
     txs = get_transaction_history(limit=100)
     return [
@@ -459,7 +485,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.get("/health")
-async def health():
+def health():
     """Health check."""
     return {"status": "ok", "service": "Agora Marketplace API"}
 

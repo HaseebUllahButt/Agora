@@ -95,7 +95,7 @@ class CircleClient:
         """
         try:
             idempotency_key = str(uuid.uuid4())
-            blockchain = os.getenv("CIRCLE_WALLET_BLOCKCHAIN", "MATIC")
+            blockchain = os.getenv("CIRCLE_WALLET_BLOCKCHAIN", "ARC-TESTNET")
             payload = {
                 "idempotencyKey": idempotency_key,
                 "description": f"Agent {agent_id} wallet on Arc",
@@ -147,17 +147,31 @@ class CircleClient:
     def get_balance(self, wallet_id: str) -> float:
         """
         Get USDC balance for a wallet on Arc.
-        
-        Returns balance in USDC (float).
+        Handles both native and ERC-20 USDC.
         """
         try:
-            wallet = self.get_wallet(wallet_id)
+            # For developer-controlled wallets, use the /balances endpoint
+            url = f"{CIRCLE_API_URL}/w3s/wallets/{wallet_id}/balances"
+            response = self.config.client.get(url)
             
-            # Standard balance check for W3S wallets
-            balances = wallet.get("balances", [])
-            for b in balances:
-                # Some APIs return amount as a string
-                if b.get("token", {}).get("address", "").lower() == USDC_ADDRESS.lower():
+            if response.status_code != 200:
+                logger.error(f"Circle balance fetch failed: {response.text}")
+                return 0.0
+            
+            data = response.json().get("data", {})
+            token_balances = data.get("tokenBalances", [])
+            
+            for b in token_balances:
+                token = b.get("token", {})
+                symbol = token.get("symbol", "")
+                
+                # On Arc, USDC is often native and has 18 decimals
+                # We check symbol and blockchain to be robust
+                if symbol == "USDC":
+                    return float(b.get("amount", 0.0))
+                
+                # Fallback for standard ERC-20 USDC address
+                if token.get("address", "").lower() == USDC_ADDRESS.lower():
                     return float(b.get("amount", 0.0))
             
             return 0.0
@@ -197,7 +211,8 @@ class CircleClient:
             
             payload = {
                 "idempotencyKey": idempotency_key,
-                "amount": [str(amount_usdc)],
+                "amounts": [str(amount_usdc)],
+                "blockchain": "ARC-TESTNET",
                 "destinationAddress": to_address,
                 "feeLevel": "MEDIUM",
                 "walletId": from_wallet_id,
@@ -216,7 +231,7 @@ class CircleClient:
             
             return {
                 "transaction_id": tx["id"],
-                "from_address": tx["source"]["address"],
+                "from_address": tx.get("source", {}).get("address", ""),
                 "to_address": to_address,
                 "amount": str(amount_usdc),
                 "state": tx["state"],

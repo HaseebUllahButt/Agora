@@ -75,37 +75,45 @@ class AgoraClient:
     
     def __init__(self, 
                  agent_id: str, 
-                 private_key: str,
-                 circle_wallet_id: str,
-                 circle_api_key: str,
-                 circle_entity_secret: str,
-                 circle_wallet_set_id: str,
-                 budget_usdc: float):
+                 private_key: str = None,
+                 circle_wallet_id: str = None,
+                 circle_api_key: str = None,
+                 circle_entity_secret: str = None,
+                 circle_wallet_set_id: str = None,
+                 budget_usdc: float = 1.0):
         """
         Initialize Agora client with Circle settlement.
-        
-        Args:
-            agent_id: Agent's unique ID in marketplace
-            private_key: Agent's private key (0x...) for signing
-            circle_wallet_id: Circle wallet ID on Arc
-            circle_api_key: Circle API key
-            circle_entity_secret: Circle entity secret
-            circle_wallet_set_id: Circle wallet set ID
-            budget_usdc: Maximum spend for this session
+        If parameters are missing, they are loaded from the local vault or environment.
         """
         self.agent_id = agent_id
-        self.private_key = private_key
-        self.circle_wallet_id = circle_wallet_id
         self.budget_usdc = budget_usdc
         self.spent_usdc = 0.0
         self.transactions = []
         self.start_time = datetime.utcnow()
+
+        # 1. Load from Vault if possible
+        from sdk.agent import CONFIG_FILE
+        vault_data = {}
+        if CONFIG_FILE.exists():
+            with open(CONFIG_FILE, "r") as f:
+                vault_data = json.load(f).get(agent_id, {})
+
+        self.private_key = private_key or vault_data.get("private_key")
+        self.circle_wallet_id = circle_wallet_id or vault_data.get("circle_wallet_id")
         
-        # Initialize Circle client for actual transfers
-        config = CircleWalletConfig(circle_api_key, circle_entity_secret, circle_wallet_set_id)
+        # 2. Circle Infrastructure
+        api_key = circle_api_key or os.getenv("CIRCLE_API_KEY")
+        secret = circle_entity_secret or os.getenv("CIRCLE_ENTITY_SECRET")
+        set_id = circle_wallet_set_id or os.getenv("CIRCLE_WALLET_SET_ID")
+
+        if not all([api_key, secret]):
+            raise ValueError(f"Circle credentials missing for buyer {agent_id}")
+
+        # Initialize Circle client
+        config = CircleWalletConfig(api_key, secret, set_id)
         self.circle_client = CircleClient(config)
         
-        logger.info(f"AgoraClient initialized for {agent_id} with Circle wallet {circle_wallet_id}")
+        logger.info(f"AgoraClient initialized for {agent_id}")
     
     def available_budget(self) -> float:
         """Calculate remaining budget."""
@@ -327,6 +335,11 @@ class AgoraClient:
         
         return settlement_record
     
+    def buy_service(self, seller_id: str, service_name: str = None, params: Dict = None):
+        """Alias for purchase_service with simplified signature."""
+        name = service_name or "General Service"
+        return self.purchase_service(seller_id=seller_id, service_name=name, params=params)
+
     def purchase_service(self, seller_id: str, service_name: str, params: Dict = None) -> Dict:
         """
         Purchase a service by seller ID and service name with Circle settlement.
@@ -383,22 +396,23 @@ class AgoraClient:
         # Generate expiry (60 seconds in future)
         expiry = int(time.time()) + 60
         
-        # Get seller address
+        # Get seller address from DB
         seller = get_agent(seller_id)
         if not seller:
             return {"error": f"Seller '{seller_id}' not found"}
         
         seller_address = seller.get("address", "0x0")
         
-        # Get buyer address from agent record
-        buyer = get_agent(self.agent_id)
-        buyer_address = buyer.get("address", "0x0") if buyer else "0x0"
+        # Derive buyer address directly from private key (never trust stale DB records)
+        from eth_keys import keys as eth_keys_lib
+        _pk = eth_keys_lib.PrivateKey(bytes.fromhex(self.private_key.replace("0x", "")))
+        buyer_address = _pk.public_key.to_checksum_address()
         
         # Sign x402 header (cryptographic proof of payment authorization)
         x402_header = sign_x402_header(
             private_key_hex=self.private_key,
             amount_usdc=price,
-            sender=buyer_address,
+            sender=buyer_address,    # derived from actual key - always correct
             recipient=seller_address,
             nonce=nonce,
             expiry_timestamp=expiry
@@ -406,56 +420,50 @@ class AgoraClient:
         
         # Record transaction locally (before settlement for atomicity tracking)
         tx_id = str(uuid.uuid4())[:8]
-        self.transactions.append({
-            "id": tx_id,
-            "provider_id": provider_id,
-            "seller_id": seller_id,
-            "service_name": service_name,
-            "nonce": nonce,
-            "amount": price,
-            "timestamp": datetime.utcnow().isoformat(),
-            "x402_header": x402_header,
-            "params": params
-        })
         
-        # Settle payment on Arc via Circle
+        # ──────────────────────────────────────────────────────────────────────
+        # NEW: BRIDGE TO MARKETPLACE GATEWAY
+        # Instead of settling locally, we send the intent to the Marketplace
+        # ──────────────────────────────────────────────────────────────────────
         try:
-            settlement_result = self.settle_payment_circle(
-                seller_id=seller_id,
-                amount_usdc=price,
-                idempotency_key=nonce  # Use nonce for idempotency
+            logger.info(f"🚀 Sending purchase intent to Marketplace Gateway for {service_name}...")
+            
+            # Marketplace API URL (Default to localhost:8000)
+            AGORA_API_URL = os.getenv("AGORA_API_URL", "http://localhost:8000")
+            
+            import requests
+            response = requests.post(
+                f"{AGORA_API_URL}/purchase",
+                json={
+                    "service_id": provider_id,
+                    "buyer_agent_id": self.agent_id,
+                    "circle_wallet_id": self.circle_wallet_id,
+                    "x402_header": x402_header,
+                    "params": params
+                },
+                timeout=30 # Allow time for on-chain settlement
             )
             
-            # Update spent budget
+            if response.status_code != 200:
+                try:
+                    error_msg = response.json().get("detail", "Marketplace rejected purchase")
+                except Exception:
+                    error_msg = f"Server error {response.status_code}: {response.text[:200] or 'empty response'}"
+                logger.error(f"❌ Marketplace Error: {error_msg}")
+                return {"error": error_msg}
+                
+            marketplace_tx = response.json()
+            
+            # Update local spent budget
             self.spent_usdc += price
             
-            logger.info(f"Purchase completed: {tx_id} ({price} USDC to {seller_id})")
+            logger.info(f"✅ Purchase completed via Gateway: {marketplace_tx['transaction_id']}")
             
-            return {
-                "transaction_id": tx_id,
-                "service_id": provider_id,
-                "service_name": service_name,
-                "seller_id": seller_id,
-                "amount_usdc": price,
-                "circle_tx_id": settlement_result["transaction_id"],
-                "arc_tx_hash": settlement_result.get("arc_tx_hash"),
-                "status": settlement_result["status"],
-                "timestamp": int(time.time()),
-                "nonce": nonce,
-                "x402_header": x402_header
-            }
+            return marketplace_tx
+            
         except Exception as e:
-            logger.error(f"Purchase failed: {e}")
-            return {
-                "error": str(e),
-                "transaction_id": tx_id,
-                "service_id": provider_id,
-                "service_name": service_name,
-                "seller_id": seller_id,
-                "amount_usdc": price,
-                "status": "failed",
-                "timestamp": int(time.time())
-            }
+            logger.error(f"❌ Gateway connection failed: {e}")
+            return {"error": f"Could not connect to Marketplace Gateway: {e}"}
 
     
     def get_transaction_history(self) -> List[Dict]:

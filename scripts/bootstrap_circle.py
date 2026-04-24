@@ -147,6 +147,22 @@ GROQ_MODEL=llama-3.1-8b-instant
             print("   Make sure your CIRCLE_API_KEY is valid and registered with Entity Secret in Circle Console")
             sys.exit(1)
     
+    # 6. Master Funder (Faucet) configuration
+    print("\n💰 Faucet Configuration (Optional)")
+    print("   To use the automatic faucet, you need one funded wallet to act as the Master Funder.")
+    
+    master_wallet_id = os.getenv("CIRCLE_MASTER_WALLET_ID", "").strip()
+    if master_wallet_id:
+        print(f"✅ Found existing CIRCLE_MASTER_WALLET_ID: {master_wallet_id}")
+    else:
+        print("   If you have a funded Circle wallet ID, enter it here (or leave blank to skip):")
+        master_wallet_id = input("   - Master Wallet ID: ").strip()
+        if master_wallet_id:
+            _write_env_var("CIRCLE_MASTER_WALLET_ID", master_wallet_id)
+            print(f"✅ Saved Master Wallet ID.")
+        else:
+            print("   ⚠️  Faucet disabled. You will need to fund agent wallets manually at faucet.circle.com")
+    
     print("\n" + "="*60)
     print("✅ BOOTSTRAP COMPLETE")
     print("="*60)
