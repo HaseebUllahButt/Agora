@@ -153,8 +153,8 @@
                 <button onclick="switchView('marketplace')" id="nav-marketplace" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors text-agora-ink text-left font-bold uppercase">
                     <i data-lucide="database" class="w-4 h-4"></i> [02] Registry
                 </button>
-                <button onclick="switchView('register')" id="nav-register" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors text-agora-ink text-left font-bold uppercase">
-                    <i data-lucide="cpu" class="w-4 h-4"></i> [03] Deploy
+                <button onclick="switchView('visualizer')" id="nav-visualizer" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors text-agora-ink text-left font-bold uppercase">
+                    <i data-lucide="network" class="w-4 h-4"></i> [03] Demo Flow
                 </button>
             </nav>
 
@@ -246,28 +246,16 @@
                 </div>
             </div>
 
-            <!-- View: Register -->
-            <div id="view-register" class="hidden view-transition max-w-2xl mx-auto mt-12">
-                <div class="panel p-0 overflow-hidden">
-                    <div class="bg-agora-ink text-agora-surface p-6 border-b-2 border-agora-ink">
-                        <h2 class="text-2xl font-bold uppercase">Initialize Entity</h2>
-                        <p class="font-mono text-xs mt-2 text-agora-surface/70">PROVISION WALLET & DEPLOY TO NETWORK</p>
-                    </div>
-
-                    <div class="p-8 space-y-6 bg-agora-surface font-mono">
-                        <div class="space-y-2">
-                            <label class="block text-xs font-bold uppercase text-agora-ink">Entity Identifier</label>
-                            <input id="reg-name" type="text" placeholder="e.g. CORE_ANALYZER_01" class="w-full bg-agora-bg border-2 border-agora-ink px-4 py-3 text-agora-ink focus:outline-none focus:ring-0 focus:bg-white transition-colors text-sm uppercase">
-                        </div>
-                        <div class="space-y-2">
-                            <label class="block text-xs font-bold uppercase text-agora-ink">Operational Matrix (Desc)</label>
-                            <textarea id="reg-desc" rows="4" placeholder="DEFINE CORE COMPETENCIES..." class="w-full bg-agora-bg border-2 border-agora-ink px-4 py-3 text-agora-ink focus:outline-none focus:ring-0 focus:bg-white transition-colors text-sm uppercase resize-none"></textarea>
-                        </div>
-                        <div class="pt-6 border-t-2 border-agora-ink border-dashed">
-                            <button onclick="registerAgent()" class="btn-brutal btn-primary w-full py-4 text-base flex items-center justify-center gap-3">
-                                <i data-lucide="upload-cloud" class="w-5 h-5"></i> Execute Deployment
-                            </button>
-                        </div>
+            <!-- View: Visualizer -->
+            <div id="view-visualizer" class="hidden view-transition max-w-[1400px] mx-auto h-[800px] flex flex-col">
+                <header class="border-b-2 border-agora-ink pb-4 mb-4 shrink-0">
+                    <h2 class="text-4xl font-bold uppercase tracking-tighter">On-Chain Data Flow</h2>
+                    <p class="font-mono text-sm text-agora-ink/60 mt-2">LIVE TRANSACTION ROUTING VISUALIZATION</p>
+                </header>
+                <div class="flex-1 panel relative overflow-hidden bg-agora-bg/30" id="visualizer-canvas" style="min-height: 600px;">
+                    <svg id="wires" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 1;"></svg>
+                    <div id="nodes-container" class="absolute inset-0 w-full h-full" style="z-index: 2;">
+                        <!-- Nodes added via JS -->
                     </div>
                 </div>
             </div>
@@ -312,6 +300,7 @@
             navBtn.classList.remove('text-agora-ink');
             
             if (view === 'marketplace') fetchAgents();
+            if (view === 'visualizer') initVisualizer();
         }
 
         // Marketplace Logic
@@ -365,14 +354,194 @@
             lucide.createIcons();
         }
 
-        // Registration Logic
-        async function registerAgent() {
-            const name = document.getElementById('reg-name').value;
-            if (!name) return alert("ERR: IDENTIFIER REQUIRED");
+        // Visualizer Logic
+        const nodeDefinitions = {
+            buyers: [
+                { id: 'smart-buyer-1', name: 'Buyer 1', type: 'buyer' },
+                { id: 'smart-buyer-2', name: 'Buyer 2', type: 'buyer' },
+                { id: 'orchestrator-agent', name: 'Orchestrator', type: 'buyer' }
+            ],
+            sellers: [
+                { id: 'summarizer-01', name: 'SummaryBot', type: 'seller' },
+                { id: 'sentiment-01', name: 'MoodReader', type: 'seller' },
+                { id: 'formatter-01', name: 'DataWizard', type: 'seller' },
+                { id: 'hasher-01', name: 'CryptoUtils', type: 'seller' },
+                { id: 'tagline-01', name: 'AdCopyAI', type: 'seller' }
+            ]
+        };
 
-            alert(`[SYS.OP] DEPLOYMENT INITIATED: ${name}`);
-            switchView('control');
-            addLog({ message: `INITIATING DEPLOYMENT FOR ${name.toUpperCase()}...`, type: 'system' });
+        let visualizerInitialized = false;
+
+        function initVisualizer() {
+            if (visualizerInitialized) return;
+            visualizerInitialized = true;
+
+            const container = document.getElementById('nodes-container');
+            
+            // Draw buyers on left
+            nodeDefinitions.buyers.forEach((node, i) => {
+                const top = 25 + (i * 25);
+                container.innerHTML += `<div id="node-${node.id}" class="absolute panel p-4 flex flex-col justify-center items-center font-mono text-xs font-bold uppercase bg-agora-surface text-agora-ink border-2 border-agora-ink z-10 shadow-[4px_4px_0px_0px_rgba(10,10,10,1)] transition-all" style="left: 10%; top: ${top}%; transform: translateY(-50%); width: 180px;">
+                    <i data-lucide="bot" class="w-6 h-6 mb-2 text-agora-blueprint"></i>
+                    ${node.name}
+                    <span class="text-[9px] text-agora-ink/50 mt-1">${node.id}</span>
+                </div>`;
+            });
+
+            // Draw sellers on right
+            nodeDefinitions.sellers.forEach((node, i) => {
+                const top = 15 + (i * 18);
+                container.innerHTML += `<div id="node-${node.id}" class="absolute panel p-4 flex flex-col justify-center items-center font-mono text-xs font-bold uppercase bg-agora-ink text-agora-surface border-2 border-agora-ink z-10 shadow-[4px_4px_0px_0px_rgba(10,10,10,1)] transition-all" style="right: 10%; top: ${top}%; transform: translateY(-50%); width: 180px;">
+                    <i data-lucide="cpu" class="w-6 h-6 mb-2 text-agora-accent"></i>
+                    ${node.name}
+                    <span class="text-[9px] text-agora-surface/50 mt-1">${node.id}</span>
+                </div>`;
+            });
+
+            setTimeout(() => {
+                lucide.createIcons();
+                drawWires();
+            }, 100);
+        }
+
+        function getCenter(el) {
+            const rect = el.getBoundingClientRect();
+            const parentRect = document.getElementById('visualizer-canvas').getBoundingClientRect();
+            return {
+                x: rect.left - parentRect.left + rect.width / 2,
+                y: rect.top - parentRect.top + rect.height / 2
+            };
+        }
+
+        function drawWires() {
+            if (!visualizerInitialized) return;
+            const svg = document.getElementById('wires');
+            if(!svg) return;
+            svg.innerHTML = '';
+            nodeDefinitions.buyers.forEach(b => {
+                const bNode = document.getElementById(`node-${b.id}`);
+                if(!bNode) return;
+                const bCenter = getCenter(bNode);
+                nodeDefinitions.sellers.forEach(s => {
+                    const sNode = document.getElementById(`node-${s.id}`);
+                    if(!sNode) return;
+                    const sCenter = getCenter(sNode);
+                    const path = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    path.setAttribute("x1", bCenter.x);
+                    path.setAttribute("y1", bCenter.y);
+                    path.setAttribute("x2", sCenter.x);
+                    path.setAttribute("y2", sCenter.y);
+                    path.setAttribute("stroke", "rgba(10, 10, 10, 0.15)");
+                    path.setAttribute("stroke-width", "2");
+                    svg.appendChild(path);
+                });
+            });
+        }
+
+        window.addEventListener('resize', drawWires);
+
+        function animatePulse(buyerId, sellerId, amount) {
+            if (!visualizerInitialized) return;
+            let bNode = document.getElementById(`node-${buyerId}`);
+            let sNode = document.getElementById(`node-${sellerId}`);
+            
+            // Nested orchestrator buys from seller (buyer is orchestrator)
+            if(!bNode && buyerId === 'orchestrator-agent') bNode = document.getElementById(`node-orchestrator-agent`);
+            
+            if(!bNode || !sNode) return;
+
+            const bCenter = getCenter(bNode);
+            const sCenter = getCenter(sNode);
+
+            const svg = document.getElementById('wires');
+            
+            const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            
+            const pulse = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            pulse.setAttribute("r", "8");
+            pulse.setAttribute("fill", "#ff3e00"); // Payment color
+            pulse.setAttribute("filter", "drop-shadow(0 0 4px #ff3e00)");
+            
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("fill", "#ff3e00");
+            text.setAttribute("font-family", "monospace");
+            text.setAttribute("font-size", "14px");
+            text.setAttribute("font-weight", "bold");
+            text.textContent = amount + " USDC";
+            
+            group.appendChild(pulse);
+            group.appendChild(text);
+            svg.appendChild(group);
+
+            const durationOut = 1200;
+            const durationBack = 1000;
+            const startTimeOut = performance.now();
+
+            // Phase 1: Payment goes out (Buyer -> Seller)
+            function updateOut(time) {
+                const elapsed = time - startTimeOut;
+                const progress = Math.min(elapsed / durationOut, 1);
+                const easeProgress = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+
+                const currentX = bCenter.x + (sCenter.x - bCenter.x) * easeProgress;
+                const currentY = bCenter.y + (sCenter.y - bCenter.y) * easeProgress;
+
+                pulse.setAttribute("cx", currentX);
+                pulse.setAttribute("cy", currentY);
+                text.setAttribute("x", currentX - 25);
+                text.setAttribute("y", currentY - 20);
+
+                if (progress < 1) {
+                    requestAnimationFrame(updateOut);
+                } else {
+                    // Flash seller
+                    sNode.style.boxShadow = "0 0 20px #ff3e00, 4px 4px 0px 0px rgba(10,10,10,1)";
+                    sNode.style.borderColor = "#ff3e00";
+                    setTimeout(() => {
+                        sNode.style.boxShadow = "4px 4px 0px 0px rgba(10,10,10,1)";
+                        sNode.style.borderColor = "#0a0a0a";
+                    }, 400);
+
+                    // Phase 2: Result comes back (Seller -> Buyer)
+                    pulse.setAttribute("fill", "#003cff"); // Blueprint color for data
+                    pulse.setAttribute("filter", "drop-shadow(0 0 4px #003cff)");
+                    text.setAttribute("fill", "#003cff");
+                    text.textContent = "{ JSON }";
+                    
+                    const startTimeBack = performance.now();
+                    
+                    function updateBack(time2) {
+                        const elapsed2 = time2 - startTimeBack;
+                        const progress2 = Math.min(elapsed2 / durationBack, 1);
+                        const easeProgress2 = progress2 < 0.5 ? 2 * progress2 * progress2 : -1 + (4 - 2 * progress2) * progress2;
+
+                        // Reverse direction: start at sCenter, go to bCenter
+                        const currentX2 = sCenter.x + (bCenter.x - sCenter.x) * easeProgress2;
+                        const currentY2 = sCenter.y + (bCenter.y - sCenter.y) * easeProgress2;
+
+                        pulse.setAttribute("cx", currentX2);
+                        pulse.setAttribute("cy", currentY2);
+                        text.setAttribute("x", currentX2 - 25);
+                        text.setAttribute("y", currentY2 - 20);
+
+                        if (progress2 < 1) {
+                            requestAnimationFrame(updateBack);
+                        } else {
+                            if (svg.contains(group)) svg.removeChild(group);
+                            
+                            // Flash buyer
+                            bNode.style.boxShadow = "0 0 20px #003cff, 4px 4px 0px 0px rgba(10,10,10,1)";
+                            bNode.style.borderColor = "#003cff";
+                            setTimeout(() => {
+                                bNode.style.boxShadow = "4px 4px 0px 0px rgba(10,10,10,1)";
+                                bNode.style.borderColor = "#0a0a0a";
+                            }, 400);
+                        }
+                    }
+                    requestAnimationFrame(updateBack);
+                }
+            }
+            requestAnimationFrame(updateOut);
         }
 
         // Mission Control Logic
@@ -451,6 +620,9 @@
                 feed.appendChild(card);
             } else {
                 feed.prepend(card);
+                if (typeof animatePulse === 'function') {
+                    animatePulse(tx.buyer, tx.seller, tx.amount_usdc);
+                }
             }
             lucide.createIcons();
         }
