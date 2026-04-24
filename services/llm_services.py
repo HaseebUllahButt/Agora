@@ -5,9 +5,9 @@ import requests
 import re
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Gemini 2.0 Flash: best for speed-sensitive, real-time LLM service tasks
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+# gemini-2.5-flash: stable GA model, best free-tier limits
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 def _call_gemini(prompt: str, json_output: bool = False) -> str:
@@ -33,7 +33,7 @@ def _call_gemini(prompt: str, json_output: bool = False) -> str:
         "generationConfig": config
     }
 
-    url = f"{GEMINI_API_URL}?key={api_key}"
+    url = f"{GEMINI_API_BASE}/{GEMINI_MODEL}:generateContent?key={api_key}"
 
     for attempt in range(4):
         try:

@@ -6,9 +6,9 @@ from typing import Dict, Any, Optional
 from .buyer import Buyer
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# Gemini 2.0 Flash: fast, low-latency, ideal for transactional agents
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+# gemini-2.5-flash: stable, best price-performance, high rate limits on free tier
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
 class SmartBuyer(Buyer):
@@ -41,7 +41,7 @@ class SmartBuyer(Buyer):
             }
         }
 
-        url = f"{GEMINI_API_URL}?key={api_key}"
+        url = f"{GEMINI_API_BASE}/{GEMINI_MODEL}:generateContent?key={api_key}"
 
         for attempt in range(4):  # up to 4 attempts with backoff
             try:
