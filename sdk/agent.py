@@ -170,7 +170,7 @@ class Agent:
                 logger.info(f"✅ {self.id} already has sufficient balance ({current_balance} USDC). Skipping fund.")
                 return {"status": "skipped", "reason": "sufficient_balance"}
             
-            amount_needed = amount_usdc - current_balance
+            amount_needed = round(amount_usdc - current_balance, 6)
             logger.info(f"💰 [Faucet] Requesting {amount_needed} USDC from Master Funder for {self.id}...")
             
             # Check master balance first

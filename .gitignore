@@ -12,4 +12,5 @@ build/
 *.egg-info/
 .DS_Store
 *.log
-/home/haseeb/kaam/uni/dist/proj/agora/hello.py
+*.sqlite3
+*.db

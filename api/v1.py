@@ -19,6 +19,7 @@ import sys
 import uuid
 import time
 import json
+import asyncio
 import hashlib
 import logging
 from datetime import datetime
@@ -28,10 +29,12 @@ logger = logging.getLogger("agora.api")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
 
 # Load environment before anything else
 load_dotenv()
@@ -63,11 +66,32 @@ else:
     circle_config = CircleWalletConfig(circle_api_key, circle_entity_secret, circle_wallet_set_id)
     circle_client = CircleClient(circle_config)
 
-app = FastAPI(title="Agora Marketplace", version="1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app = FastAPI(title="Agora Marketplace API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Initialize database on startup
 init_database()
+
+@app.on_event("startup")
+def register_local_demo_functions():
+    """For the hackathon demo, load the Python functions into the registry so the API can execute them natively."""
+    from sdk.provider import get_service_registry
+    from services import llm_services, data_services, compute_services
+    
+    registry = get_service_registry()
+    registry.register(service_id="summarizer-01-summarybot", agent_id="summarizer-01", name="SummaryBot", func=llm_services.summarize_text, price=0.001, category="LLM", description="Desc")
+    registry.register(service_id="sentiment-01-moodreader", agent_id="sentiment-01", name="MoodReader", func=llm_services.analyze_sentiment, price=0.001, category="LLM", description="Desc")
+    registry.register(service_id="formatter-01-datawizard", agent_id="formatter-01", name="DataWizard", func=data_services.json_to_csv, price=0.0005, category="Data", description="Desc")
+    registry.register(service_id="hasher-01-cryptoutils", agent_id="hasher-01", name="CryptoUtils", func=compute_services.generate_hash, price=0.0005, category="Compute", description="Desc")
+    registry.register(service_id="tagline-01-adcopyai", agent_id="tagline-01", name="AdCopyAI", func=llm_services.generate_tagline, price=0.002, category="LLM", description="Desc")
+    print("✅ Local demo service functions mapped in API memory.")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DATA MODELS
@@ -192,14 +216,21 @@ def register_service(agent_id: str, req: RegisterServiceRequest):
         )
         
         # ALSO: Update the in-memory ServiceRegistry so /purchase can find it
-        def dummy_service(*args, **kwargs):
-            return {"status": "executed", "service": req.name}
+        registry = get_service_registry()
+        existing = registry.get(provider_id)
+        
+        if existing and existing.get("function"):
+            func_to_use = existing["function"]
+        else:
+            def dummy_service(*args, **kwargs):
+                return {"status": "executed", "service": req.name}
+            func_to_use = dummy_service
             
-        get_service_registry().register(
+        registry.register(
             service_id=provider_id,
             agent_id=agent_id, # CRITICAL: Pass the agent_id here!
             name=req.name,
-            func=dummy_service,
+            func=func_to_use,
             price=req.price_usdc,
             category=req.service_type,
             description=req.description
@@ -251,6 +282,7 @@ def search_services(q: str = ""):
         return [
             {
                 "provider_id": r.get("id"),
+                "agent_id": r.get("agent_id"),
                 "name": r.get("name"),
                 "type": r.get("service_type"),
                 "description": r.get("description"),
@@ -269,6 +301,7 @@ def search_services(q: str = ""):
     return [
         {
             "provider_id": r.get("id"),
+            "agent_id": r.get("agent_id"),
             "name": r.get("name"),
             "type": r.get("service_type"),
             "description": r.get("description"),
@@ -286,7 +319,7 @@ def search_services(q: str = ""):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.post("/purchase")
-def purchase_service(req: PurchaseServiceRequest):
+async def purchase_service(req: PurchaseServiceRequest, background_tasks: BackgroundTasks):
     """
     Core marketplace: Buy + Execute + Settle
     
@@ -343,6 +376,8 @@ def purchase_service(req: PurchaseServiceRequest):
                 idempotency_key=str(uuid.uuid4())
             )
             circle_tx_id = tx_result.get("transaction_id", "STUB")
+            
+            circle_tx_id = tx_result.get("transaction_id", "STUB")
         except Exception as e:
             logger.error(f"On-chain settlement failed: {e}")
             raise HTTPException(status_code=502, detail=f"Blockchain settlement failed: {str(e)}")
@@ -357,6 +392,8 @@ def purchase_service(req: PurchaseServiceRequest):
     
     try:
         endpoint = service_meta.get("endpoint_url")
+        func = service_registry.get_function(req.service_id)
+        
         if endpoint:
             import requests
             proxy_resp = requests.post(
@@ -366,6 +403,9 @@ def purchase_service(req: PurchaseServiceRequest):
                 headers={"X-Agora-Gateway": "Verified-Payment", "X-Circle-TX": circle_tx_id}
             )
             service_result = proxy_resp.json() if proxy_resp.status_code == 200 else {"error": "Service failed"}
+        elif func:
+            # Call the registered Python function natively
+            service_result = func(req.params)
         else:
             service_result = {"message": f"Execution proof for {service_meta['name']}", "status": "delivered"}
         
@@ -401,31 +441,84 @@ def purchase_service(req: PurchaseServiceRequest):
     event_bus = get_event_bus()
     event_bus.publish("transaction", {
         "tx_id": tx_id,
+        "arc_tx_hash": None,
         "buyer": req.buyer_agent_id,
         "seller": seller_agent_id,
+        "seller_address": seller_agent["address"],
         "service_name": service_meta["name"],
         "amount_usdc": price,
-        "status": "erc8004_settled", # Emphasize the ERC-8004 trust standard
+        "status": "erc8004_settled", 
         "erc8004_proof": proof_hash,
         "result": service_result,
         "timestamp": datetime.utcnow().isoformat()
     })
     
-    # Step 8: Return complete transaction to buyer
+    # NEW: Also broadcast to logs so CLI-initiated purchases show up in console
+    event_bus.publish("logs", {
+        "message": f"💸 {req.buyer_agent_id} paid {price} USDC for {service_meta['name']}",
+        "type": "payment",
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
+    # Trigger background polling if Circle was used
+    if circle_client and circle_tx_id and not circle_tx_id.startswith("DEMO"):
+        background_tasks.add_task(poll_tx_hash, tx_id, circle_tx_id)
+        
     return {
         "transaction_id": tx_id,
+        "circle_tx_id": circle_tx_id,
         "status": "erc8004_settled", 
         "buyer_agent": req.buyer_agent_id,
         "seller_agent": seller_agent_id,
-        "service_id": req.service_id,
-        "service_name": service_meta["name"],
         "amount_usdc": price,
-        "nonce": nonce,
-        "erc8004_proof": proof_hash,
         "result": service_result,
-        "timestamp": datetime.utcnow().isoformat(),
-        "message": "Service executed: payment verified, ERC-8004 settled, cryptographic proof established"
+        "seller_address": seller_agent["address"],
+        "erc8004_proof": proof_hash,
+        "timestamp": datetime.utcnow().isoformat()
     }
+
+    
+async def poll_tx_hash(tx_id: str, circle_tx_id: str):
+    """
+    Poll Circle API until txHash is available, then broadcast update to dashboard.
+    """
+    event_bus = get_event_bus()
+    max_attempts = 40
+    # Wait longer initially as minting takes time
+    await asyncio.sleep(3)
+    
+    for i in range(max_attempts):
+        try:
+            status = circle_client.get_transaction_status(circle_tx_id)
+            tx_hash = status.get("txHash")
+            if tx_hash:
+                event_bus.publish("transaction_update", {
+                    "tx_id": tx_id,
+                    "arc_tx_hash": tx_hash,
+                    "status": "confirmed",
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                logger.info(f"✅ CONFIRMED on chain: {tx_id} -> {tx_hash}")
+                return
+            else:
+                logger.debug(f"Polling {tx_id}... attempt {i+1} (Pending)")
+        except Exception as e:
+            # Resource not found is common in the first few seconds
+            logger.debug(f"Polling {tx_id}... (Circle resource still initializing)")
+            
+        await asyncio.sleep(2)
+    
+    logger.warning(f"❌ TIMEOUT: Could not find hash for {tx_id} after {max_attempts} attempts.")
+
+
+@app.post("/purchase")
+async def purchase_service(req: PurchaseServiceRequest, background_tasks: BackgroundTasks):
+    """
+    Buy a service with cryptographic proof of payment.
+    - Settle via Circle (on-chain)
+    - Execute Python function
+    - Return result + proof
+    """
 
 
 
@@ -446,42 +539,75 @@ def list_transactions():
     ]
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+# ──────────────────────────────────────────────────────────────────────────────
+# DEMO CONTROL CENTER
+# ──────────────────────────────────────────────────────────────────────────────
+
+@app.post("/demo/setup")
+async def run_demo_setup(background_tasks: BackgroundTasks):
+    """Bootstrap the economy from the dashboard."""
+    from scripts.setup_demo_economy import setup_economy
+    event_bus = get_event_bus()
+    
+    def log_callback(msg):
+        event_bus.publish("logs", {"message": msg, "type": "setup", "timestamp": datetime.utcnow().isoformat()})
+    
+    background_tasks.add_task(setup_economy, callback=log_callback)
+    return {"status": "Setup started", "message": "Check the live console for progress."}
+
+
+@app.post("/demo/frenzy")
+async def run_demo_frenzy(background_tasks: BackgroundTasks):
+    """Trigger the transaction frenzy from the dashboard."""
+    from scripts.frenzy_demo import run_frenzy
+    event_bus = get_event_bus()
+    
+    def log_callback(msg):
+        event_bus.publish("logs", {"message": msg, "type": "frenzy", "timestamp": datetime.utcnow().isoformat()})
+    
+    # We skip setup because the user should have pressed setup first, or we can include it.
+    background_tasks.add_task(run_frenzy, callback=log_callback, skip_setup=True)
+    return {"status": "Frenzy started", "message": "Transaction burst initiated."}
+
+
+@app.post("/demo/single")
+async def run_demo_single(background_tasks: BackgroundTasks):
+    """Trigger a single smart mission from the dashboard."""
+    from scripts.single_tx_demo import run_single_demo
+    event_bus = get_event_bus()
+    
+    def log_callback(msg):
+        event_bus.publish("logs", {"message": msg, "type": "decision", "timestamp": datetime.utcnow().isoformat()})
+    
+    # Run a single smart mission
+    background_tasks.add_task(run_single_demo, callback=log_callback, skip_setup=True)
+    return {"status": "Mission started", "message": "Smart agent is planning a mission."}
+
+
+@app.websocket("/ws/transactions")
+async def transaction_feed(websocket: WebSocket):
     """
-    WebSocket endpoint for real-time transaction feed.
-    
-    Streams transaction events as they occur in the marketplace.
-    
-    Event format:
-    {
-        "tx_id": "abc123",
-        "buyer": "alice",
-        "seller": "bob",
-        "service_name": "CSV Analysis",
-        "amount_usdc": 0.01,
-        "status": "success",
-        "result": {...},
-        "timestamp": "2026-04-21T..."
-    }
+    WebSocket endpoint for real-time transaction and log feed.
     """
     await websocket.accept()
     event_bus = get_event_bus()
     
+    async def stream_topic(topic):
+        async for event in event_bus.subscribe(topic):
+            await websocket.send_json({"topic": topic, "data": event})
+
+    import asyncio
     try:
-        # Subscribe to transaction events and stream them
-        async for event in event_bus.subscribe("transaction"):
-            # Send as JSON to client
-            await websocket.send_json(event)
+        # Create tasks for transactions, updates, and logs
+        tx_task = asyncio.create_task(stream_topic("transaction"))
+        upd_task = asyncio.create_task(stream_topic("transaction_update"))
+        log_task = asyncio.create_task(stream_topic("logs"))
+        
+        await asyncio.gather(tx_task, upd_task, log_task)
     except WebSocketDisconnect:
-        # Client disconnected
         pass
     except Exception as e:
-        # Unexpected error
-        try:
-            await websocket.send_json({"error": str(e)})
-        except:
-            pass
+        logger.error(f"WS Error: {e}")
 
 
 @app.get("/health")

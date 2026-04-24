@@ -48,6 +48,7 @@ class CircleClient:
     """
     
     def __init__(self, config: CircleWalletConfig):
+        print(f"📡 [DEBUG] CircleClient initialized (Code Version: 1.2)")
         self.config = config
     
     def _get_entity_secret_ciphertext(self) -> str:
@@ -244,18 +245,33 @@ class CircleClient:
     def get_transaction_status(self, transaction_id: str) -> dict:
         """Get transaction status."""
         try:
-            url = f"{CIRCLE_API_URL}/w3s/developer/transactions/{transaction_id}"
+            # The GET endpoint for transactions does not use /developer
+            url = f"{CIRCLE_API_URL}/w3s/transactions/{transaction_id}"
             response = self.config.client.get(url)
+            
+            # FORCE DEBUG PRINT FOR 404s TOO
+            if response.status_code == 404:
+                print(f"   [DEBUG] Circle API returned 404 Not Found for {transaction_id[:8]}...")
+                return {"state": "INDEXING", "txHash": None, "confirmations": 0}
             
             if response.status_code != 200:
                 logger.error(f"Transaction status fetch failed: {response.text}")
                 raise Exception(f"Failed to get transaction status: {response.text}")
             
-            tx = response.json()["data"]["transaction"]
+            data = response.json()["data"]
+            # For developer-controlled wallets, the fields are top-level in 'data'
+            tx = data.get("transaction", data) 
+            
+            state = tx.get("state")
+            tx_hash = tx.get("txHash")
+            
+            # FORCE DEBUG PRINT
+            print(f"   [DEBUG] ID: {transaction_id[:8]} | State: {state} | Hash: {tx_hash}")
+            
             return {
-                "state": tx["state"],
-                "txHash": tx.get("txHash", None),
-                "confirmations": tx.get("blockchainTxId", {}).get("confirmations", 0)
+                "state": state,
+                "txHash": tx_hash,
+                "confirmations": tx.get("blockchainTxId", {}).get("confirmations", 0) if isinstance(tx.get("blockchainTxId"), dict) else 0
             }
         except Exception as e:
             logger.error(f"Transaction status error: {e}")
