@@ -107,7 +107,7 @@ class SmartBuyer(Buyer):
         }}
         """
 
-        print("🤔 Consulting Gemini 2.0 Flash for decision...")
+        print("🤔 Consulting Gemini 2.5 Flash for decision...")
         decision_str = self._think(prompt)
         print(f"   [Debug] Gemini Response: {decision_str}")
         print(f"   [Debug] Services JSON sent to Gemini: {services_json}")

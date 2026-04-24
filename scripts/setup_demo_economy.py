@@ -24,7 +24,7 @@ def setup_economy(callback=None):
             "id": "summarizer-01",
             "name": "SummaryBot",
             "type": "LLM",
-            "desc": "Condenses long text into concise summaries using Groq.",
+            "desc": "Condenses long text into concise summaries using Gemini.",
             "price": 0.001,
             "func": llm_services.summarize_text
         },
