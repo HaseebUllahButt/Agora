@@ -262,18 +262,26 @@ class CircleClient:
             raise
 
 
-def get_circle_client() -> CircleClient:
+def get_circle_client(
+    api_key: Optional[str] = None,
+    entity_secret: Optional[str] = None,
+    wallet_set_id: Optional[str] = None
+) -> CircleClient:
     """
-    Factory function: Get Circle client from environment variables.
+    Factory function: Get Circle client from parameters or environment variables.
     
-    Requires:
-        CIRCLE_API_KEY
-        CIRCLE_ENTITY_SECRET
-        CIRCLE_WALLET_SET_ID
+    Args (can pass directly to avoid .env re-reads):
+        api_key: Circle API Key (or reads from CIRCLE_API_KEY)
+        entity_secret: Entity Secret (or reads from CIRCLE_ENTITY_SECRET)
+        wallet_set_id: Wallet Set ID (or reads from CIRCLE_WALLET_SET_ID)
+    
+    This allows bootstrap to pass in-memory values directly rather than 
+    relying on .env file re-reads which can be stale.
     """
-    api_key = os.getenv("CIRCLE_API_KEY")
-    entity_secret = os.getenv("CIRCLE_ENTITY_SECRET")
-    wallet_set_id = os.getenv("CIRCLE_WALLET_SET_ID")
+    # Use provided values, fallback to .env
+    api_key = api_key or os.getenv("CIRCLE_API_KEY")
+    entity_secret = entity_secret or os.getenv("CIRCLE_ENTITY_SECRET")
+    wallet_set_id = wallet_set_id or os.getenv("CIRCLE_WALLET_SET_ID")
     
     if not all([api_key, entity_secret]):
         raise ValueError(

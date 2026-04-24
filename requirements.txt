@@ -10,4 +10,4 @@ pycryptodome
 requests
 websockets
 scikit-learn
-numpy
+numpycircle-developer-controlled-wallets
