@@ -30,8 +30,8 @@ class Agent:
     
     def __init__(self, 
                  agent_id: str,
-                 name: str,
-                 private_key: str,
+                 name: str = None,
+                 private_key: str = None,
                  circle_api_key: str = None,
                  circle_entity_secret: str = None,
                  circle_wallet_set_id: str = None,
@@ -43,11 +43,11 @@ class Agent:
         Initialize an agent with local-first Circle integration.
         """
         self.id = agent_id
-        self.name = name
+        self.name = name or agent_id
         self.private_key = private_key
         
         # Identity address (secp256k1)
-        self.address = get_address_from_private_key(private_key)
+        self.address = get_address_from_private_key(private_key) if private_key else None
         
         self.description = description
         self.capabilities = capabilities or []

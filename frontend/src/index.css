@@ -93,6 +93,7 @@ h1, h2, h3, .logo {
 /* Main Content area */
 .main-content {
   margin-left: 280px;
+  margin-right: 350px;
   padding: 40px;
   min-height: 100vh;
 }
