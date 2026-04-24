@@ -75,6 +75,10 @@ def run_frenzy(callback=None, skip_setup=False):
                         log(f"   ✅ Verified on Arc! Hash: {arc_hash[:15]}... -> Seller: {seller_addr[:10]}...")
                     else:
                         log(f"   ✅ Payment Sent! TX: {full_tx_id} -> Seller: {seller_addr[:10]}... (Pending Hash)")
+                        
+                    result_data = tx.get("result", {})
+                    import json
+                    log(f"   📦 Result: {json.dumps(result_data)}")
             else:
                 log(f"   ⚠️ Buyer could not complete mission.")
         except Exception as e:

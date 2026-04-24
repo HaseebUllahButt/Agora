@@ -6,165 +6,273 @@
     <title>Agora Mission Control</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Space Grotesk"', 'sans-serif'],
+                        mono: ['"Space Mono"', 'monospace'],
+                    },
+                    colors: {
+                        agora: {
+                            bg: '#e8e8e3',
+                            ink: '#0a0a0a',
+                            surface: '#f4f4f0',
+                            accent: '#ff3e00',
+                            blueprint: '#003cff',
+                            border: '#d1d1cc'
+                        }
+                    },
+                    boxShadow: {
+                        'brutal': '4px 4px 0px 0px rgba(10,10,10,1)',
+                        'brutal-hover': '2px 2px 0px 0px rgba(10,10,10,1)',
+                        'brutal-active': '0px 0px 0px 0px rgba(10,10,10,1)'
+                    }
+                }
+            }
+        }
+    </script>
     <style>
         body {
-            background-color: #0a0c10;
-            color: #cbd5e1;
-            font-family: 'Inter', sans-serif;
-            overflow-x: hidden;
+            background-color: theme('colors.agora.bg');
+            color: theme('colors.agora.ink');
+            background-image: 
+                linear-gradient(theme('colors.agora.border') 1px, transparent 1px),
+                linear-gradient(90deg, theme('colors.agora.border') 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: -1px -1px;
         }
-        .glass {
-            background: rgba(22, 27, 34, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+
+        /* Industrial Scrollbar */
+        ::-webkit-scrollbar { width: 12px; border-left: 1px solid theme('colors.agora.ink'); }
+        ::-webkit-scrollbar-track { background: theme('colors.agora.surface'); }
+        ::-webkit-scrollbar-thumb { background: theme('colors.agora.ink'); }
+
+        .panel {
+            background: theme('colors.agora.surface');
+            border: 2px solid theme('colors.agora.ink');
+            box-shadow: theme('boxShadow.brutal');
+            transition: all 0.1s ease;
         }
-        .glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.1); }
-        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        .view-transition { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: scale(0.98); }
-            to { opacity: 1; transform: scale(1); }
+
+        .btn-brutal {
+            background: theme('colors.agora.surface');
+            border: 2px solid theme('colors.agora.ink');
+            box-shadow: theme('boxShadow.brutal');
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        
+        .btn-brutal:hover {
+            transform: translate(2px, 2px);
+            box-shadow: theme('boxShadow.brutal-hover');
+        }
+
+        .btn-brutal:active {
+            transform: translate(4px, 4px);
+            box-shadow: theme('boxShadow.brutal-active');
+            background: theme('colors.agora.ink');
+            color: theme('colors.agora.surface');
+        }
+
+        .btn-primary {
+            background: theme('colors.agora.accent');
+            color: white;
+        }
+
         .nav-active {
-            @apply bg-slate-800 text-white border-l-4 border-l-green-500;
+            background: theme('colors.agora.ink');
+            color: theme('colors.agora.surface');
         }
+        .nav-active i {
+            color: theme('colors.agora.surface');
+        }
+
+        .view-transition { animation: slideIn 0.2s cubic-bezier(0, 0, 0.2, 1); }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .ticker-tape {
+            border-bottom: 2px solid theme('colors.agora.ink');
+            background: theme('colors.agora.ink');
+            color: theme('colors.agora.surface');
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            padding: 4px 16px;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: theme('colors.agora.accent');
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Hard table borders for logs */
+        .log-entry { border-bottom: 1px solid theme('colors.agora.border'); padding: 8px 0; }
+        .log-entry:last-child { border-bottom: none; }
     </style>
 </head>
-<body class="flex h-screen overflow-hidden">
-    <!-- Sidebar -->
-    <aside class="w-64 glass border-r border-slate-800 flex flex-col p-6 shrink-0">
-        <div class="flex items-center gap-3 mb-12">
-            <div class="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center glow-green shrink-0">
-                <i data-lucide="zap" class="text-white w-6 h-6 fill-white"></i>
-            </div>
-            <h1 class="text-xl font-black text-white tracking-tighter uppercase italic">Agora</h1>
+<body class="flex flex-col h-screen overflow-hidden">
+    <!-- Top Bar -->
+    <div class="ticker-tape shrink-0 flex items-center">
+        <div class="flex items-center gap-6">
+            <span>SYS.OP: AGORA_MARKETPLACE</span>
+            <span class="flex items-center"><span class="status-dot"></span>ARC TESTNET: ONLINE</span>
         </div>
+        <div id="clock" class="font-bold tracking-widest">00:00:00 UTC</div>
+    </div>
 
-        <nav class="space-y-2 flex-1">
-            <button onclick="switchView('control')" id="nav-control" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-slate-400 hover:bg-slate-800 nav-active">
-                <i data-lucide="layout-dashboard" class="w-5 h-5"></i> Mission Control
-            </button>
-            <button onclick="switchView('marketplace')" id="nav-marketplace" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-slate-400 hover:bg-slate-800">
-                <i data-lucide="shopping-bag" class="w-5 h-5"></i> Agent Market
-            </button>
-            <button onclick="switchView('register')" id="nav-register" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-sm font-bold text-slate-400 hover:bg-slate-800">
-                <i data-lucide="user-plus" class="w-5 h-5"></i> Deploy Agent
-            </button>
-        </nav>
-
-        <div class="mt-auto pt-6 border-t border-slate-800">
-            <div class="flex items-center gap-2 text-[10px] mono text-slate-500 uppercase tracking-widest">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                Arc Testnet Active
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <aside class="w-72 bg-agora-surface border-r-2 border-agora-ink flex flex-col shrink-0 z-10">
+            <div class="p-6 border-b-2 border-agora-ink bg-agora-ink text-agora-surface">
+                <h1 class="text-3xl font-bold tracking-tighter uppercase mb-1">Agora</h1>
+                <p class="font-mono text-xs text-agora-surface/70">AUTONOMOUS SETTLEMENT LAYER</p>
             </div>
-        </div>
-    </aside>
 
-    <!-- Main Content -->
-    <div class="flex-1 overflow-y-auto p-8 relative">
-        
-        <!-- View: Mission Control -->
-        <div id="view-control" class="view-transition space-y-8">
-            <header class="flex justify-between items-center mb-8">
-                <div>
-                    <h2 class="text-3xl font-black text-white tracking-tighter uppercase italic">Mission Control</h2>
-                    <p class="text-slate-500 text-sm">Real-time ledger and reasoning monitor.</p>
-                </div>
-                <div class="flex gap-4">
-                    <button onclick="runDemoAction('setup')" id="bootstrap-btn" class="px-6 py-3 glass rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all font-bold text-sm border-l-4 border-l-blue-500">
-                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> BOOTSTRAP
-                    </button>
-                    <button onclick="runDemoAction('single')" id="single-btn" class="px-6 py-3 glass rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all font-bold text-sm border-l-4 border-l-purple-500">
-                        <i data-lucide="target" class="w-4 h-4"></i> SINGLE MISSION
-                    </button>
-                    <button onclick="runDemoAction('frenzy')" id="frenzy-btn" class="px-6 py-3 bg-green-600 hover:bg-green-500 text-white rounded-2xl flex items-center gap-2 transition-all font-bold text-sm glow-green">
-                        <i data-lucide="play" class="w-4 h-4 fill-white"></i> RUN TEST
-                    </button>
-                </div>
-            </header>
+            <nav class="flex-1 p-4 space-y-3 font-mono text-sm">
+                <p class="text-xs font-bold text-agora-ink/50 mb-4 px-2 uppercase">Modules</p>
+                <button onclick="switchView('control')" id="nav-control" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors nav-active text-left font-bold uppercase">
+                    <i data-lucide="terminal" class="w-4 h-4"></i> [01] Monitor
+                </button>
+                <button onclick="switchView('marketplace')" id="nav-marketplace" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors text-agora-ink text-left font-bold uppercase">
+                    <i data-lucide="database" class="w-4 h-4"></i> [02] Registry
+                </button>
+                <button onclick="switchView('register')" id="nav-register" class="w-full flex items-center gap-3 px-4 py-3 border-2 border-transparent hover:border-agora-ink transition-colors text-agora-ink text-left font-bold uppercase">
+                    <i data-lucide="cpu" class="w-4 h-4"></i> [03] Deploy
+                </button>
+            </nav>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                <!-- Status & Console -->
-                <div class="lg:col-span-4 flex flex-col gap-8">
-                    <div class="glass rounded-3xl p-6 border-t-4 border-t-green-500">
-                        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <i data-lucide="activity" class="w-4 h-4"></i> System Status
-                        </h2>
-                        <div class="flex justify-between items-end">
-                            <div>
-                                <p id="system-status" class="text-4xl font-black text-white italic">Idle</p>
-                                <p class="text-[10px] mono text-slate-500 mt-1 uppercase">Monitor Active</p>
-                            </div>
-                            <div class="text-right">
-                                <p id="tx-count" class="text-2xl font-bold text-green-400 mono">0</p>
-                                <p class="text-[10px] text-slate-500 uppercase font-bold">TXs</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="glass rounded-3xl overflow-hidden flex flex-col h-[500px]">
-                        <div class="bg-slate-900/50 p-4 border-b border-slate-800">
-                            <h2 class="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                <i data-lucide="terminal" class="w-4 h-4 text-green-500"></i> Reasoning Console
-                            </h2>
-                        </div>
-                        <div id="log-container" class="p-4 font-mono text-[11px] overflow-y-auto flex-1 space-y-2 bg-black/40"></div>
-                    </div>
-                </div>
-
-                <!-- Feed -->
-                <div class="lg:col-span-8">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                            <i data-lucide="box" class="w-5 h-5 text-green-500"></i> Transaction Ledger
-                        </h2>
-                    </div>
-                    <div id="tx-feed" class="space-y-4"></div>
+            <div class="p-6 border-t-2 border-agora-ink bg-agora-bg/50">
+                <div class="font-mono text-xs flex justify-between items-center text-agora-ink">
+                    <span class="font-bold">v1.0.0</span>
+                    <span class="text-agora-blueprint font-bold">STABLE</span>
                 </div>
             </div>
-        </div>
+        </aside>
 
-        <!-- View: Agent Marketplace -->
-        <div id="view-marketplace" class="hidden view-transition space-y-8">
-            <header class="mb-8">
-                <h2 class="text-3xl font-black text-white tracking-tighter uppercase italic">Agent Marketplace</h2>
-                <p class="text-slate-500 text-sm">Discover and audit agents offering services on the Arc chain.</p>
-            </header>
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto p-8 relative">
             
-            <div id="marketplace-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                <!-- Agents will be loaded here -->
-            </div>
-        </div>
-
-        <!-- View: Register -->
-        <div id="view-register" class="hidden view-transition">
-            <div class="max-w-2xl mx-auto">
-                <header class="mb-12 text-center">
-                    <h2 class="text-4xl font-black text-white tracking-tighter uppercase italic">Deploy New Agent</h2>
-                    <p class="text-slate-500 mt-2">Create a local wallet and register your agent on the global marketplace.</p>
+            <!-- View: Mission Control -->
+            <div id="view-control" class="view-transition max-w-[1400px] mx-auto h-full flex flex-col">
+                <header class="flex justify-between items-end border-b-2 border-agora-ink pb-4 mb-6">
+                    <div>
+                        <h2 class="text-4xl font-bold uppercase tracking-tighter">Mission Control</h2>
+                        <p class="font-mono text-sm text-agora-ink/60 mt-2">REAL-TIME LEDGER & REASONING PIPELINE</p>
+                    </div>
+                    <div class="flex gap-3 font-mono text-sm">
+                        <button onclick="runDemoAction('setup')" id="bootstrap-btn" class="bg-agora-surface border-2 border-agora-ink shadow-[4px_4px_0px_0px_rgba(10,10,10,1)] hover:shadow-[2px_2px_0px_0px_rgba(10,10,10,1)] hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none active:bg-agora-ink active:text-agora-surface font-mono font-bold uppercase transition-all px-4 py-2 flex items-center gap-2">
+                            <i data-lucide="power" class="w-4 h-4"></i> Init
+                        </button>
+                        <button onclick="runDemoAction('single')" id="single-btn" class="bg-agora-surface border-2 border-agora-ink shadow-[4px_4px_0px_0px_rgba(10,10,10,1)] hover:shadow-[2px_2px_0px_0px_rgba(10,10,10,1)] hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none active:bg-agora-ink active:text-agora-surface font-mono font-bold uppercase transition-all px-4 py-2 flex items-center gap-2">
+                            <i data-lucide="zap" class="w-4 h-4"></i> Single Run
+                        </button>
+                        <button onclick="runDemoAction('frenzy')" id="stress-btn" class="bg-agora-accent text-white border-2 border-agora-ink shadow-[4px_4px_0px_0px_rgba(10,10,10,1)] hover:shadow-[2px_2px_0px_0px_rgba(10,10,10,1)] hover:translate-x-[2px] hover:translate-y-[2px] active:translate-x-[4px] active:translate-y-[4px] active:shadow-none font-mono font-bold uppercase transition-all px-6 py-2 flex items-center gap-2">
+                            <i data-lucide="flame" class="w-4 h-4"></i> Frenzy Mode
+                        </button>
+                    </div>
                 </header>
 
-                <div class="glass rounded-[40px] p-10 space-y-8">
-                    <div class="space-y-4">
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Agent Identity</label>
-                        <input id="reg-name" type="text" placeholder="e.g. DataAnalyzer_Bot" class="w-full bg-slate-900/50 border border-slate-800 rounded-2xl px-6 py-4 text-white focus:outline-none focus:border-green-500 transition-all text-lg font-bold">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 flex-1 min-h-0">
+                    <!-- Status & Console -->
+                    <div class="lg:col-span-5 flex flex-col gap-6 h-full">
+                        <div class="panel p-6">
+                            <h3 class="font-mono text-xs font-bold uppercase mb-4 text-agora-blueprint flex items-center gap-2">
+                                <i data-lucide="activity" class="w-4 h-4"></i> Telemetry
+                            </h3>
+                            <div class="flex justify-between items-end">
+                                <div>
+                                    <p id="system-status" class="text-3xl font-bold uppercase">Idle</p>
+                                    <p class="font-mono text-xs text-agora-ink/60 mt-1">STATE</p>
+                                </div>
+                                <div class="text-right">
+                                    <p id="tx-count" class="text-3xl font-bold font-mono text-agora-accent">0</p>
+                                    <p class="font-mono text-xs text-agora-ink/60 mt-1">VOL</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="panel flex flex-col flex-1 min-h-0">
+                            <div class="bg-agora-ink text-agora-surface p-3 border-b-2 border-agora-ink flex justify-between items-center shrink-0">
+                                <h3 class="font-mono text-xs font-bold uppercase flex items-center gap-2">
+                                    <i data-lucide="terminal-square" class="w-4 h-4"></i> Output Stream
+                                </h3>
+                                <span class="status-dot bg-agora-surface"></span>
+                            </div>
+                            <div id="log-container" class="p-4 font-mono text-xs overflow-y-auto flex-1 bg-agora-bg text-agora-ink leading-relaxed"></div>
+                        </div>
                     </div>
-                    <div class="space-y-4">
-                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">Capability Description</label>
-                        <textarea id="reg-desc" rows="4" placeholder="What value does this agent provide to the network?" class="w-full bg-slate-900/50 border border-slate-800 rounded-2xl px-6 py-4 text-white focus:outline-none focus:border-green-500 transition-all"></textarea>
+
+                    <!-- Feed -->
+                    <div class="lg:col-span-7 flex flex-col h-full">
+                        <h3 class="font-mono text-xs font-bold uppercase mb-4 text-agora-ink flex justify-between items-center shrink-0">
+                            <span class="flex items-center gap-2"><i data-lucide="list" class="w-4 h-4"></i> Execution Ledger</span>
+                            <button onclick="clearLedger()" class="text-agora-accent hover:text-agora-ink transition-colors flex items-center gap-1">
+                                <i data-lucide="trash-2" class="w-3 h-3"></i> VANISH
+                            </button>
+                        </h3>
+                        <div id="tx-feed" class="space-y-4 overflow-y-auto flex-1 pr-2 pb-8">
+                            <!-- Transactions -->
+                        </div>
                     </div>
-                    <button onclick="registerAgent()" class="w-full bg-green-600 hover:bg-green-500 text-white rounded-[24px] py-6 font-black text-xl uppercase italic tracking-tighter shadow-2xl shadow-green-500/20 transition-all flex items-center justify-center gap-3">
-                        <i data-lucide="zap" class="w-6 h-6 fill-white"></i>
-                        Initiate Deployment
-                    </button>
                 </div>
             </div>
-        </div>
 
+            <!-- View: Agent Marketplace -->
+            <div id="view-marketplace" class="hidden view-transition max-w-[1400px] mx-auto">
+                <header class="border-b-2 border-agora-ink pb-4 mb-8">
+                    <h2 class="text-4xl font-bold uppercase tracking-tighter">Global Registry</h2>
+                    <p class="font-mono text-sm text-agora-ink/60 mt-2">VERIFIED SERVICE PROVIDERS ON ARC NETWORK</p>
+                </header>
+                
+                <div id="marketplace-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Agents will be loaded here -->
+                </div>
+            </div>
+
+            <!-- View: Register -->
+            <div id="view-register" class="hidden view-transition max-w-2xl mx-auto mt-12">
+                <div class="panel p-0 overflow-hidden">
+                    <div class="bg-agora-ink text-agora-surface p-6 border-b-2 border-agora-ink">
+                        <h2 class="text-2xl font-bold uppercase">Initialize Entity</h2>
+                        <p class="font-mono text-xs mt-2 text-agora-surface/70">PROVISION WALLET & DEPLOY TO NETWORK</p>
+                    </div>
+
+                    <div class="p-8 space-y-6 bg-agora-surface font-mono">
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold uppercase text-agora-ink">Entity Identifier</label>
+                            <input id="reg-name" type="text" placeholder="e.g. CORE_ANALYZER_01" class="w-full bg-agora-bg border-2 border-agora-ink px-4 py-3 text-agora-ink focus:outline-none focus:ring-0 focus:bg-white transition-colors text-sm uppercase">
+                        </div>
+                        <div class="space-y-2">
+                            <label class="block text-xs font-bold uppercase text-agora-ink">Operational Matrix (Desc)</label>
+                            <textarea id="reg-desc" rows="4" placeholder="DEFINE CORE COMPETENCIES..." class="w-full bg-agora-bg border-2 border-agora-ink px-4 py-3 text-agora-ink focus:outline-none focus:ring-0 focus:bg-white transition-colors text-sm uppercase resize-none"></textarea>
+                        </div>
+                        <div class="pt-6 border-t-2 border-agora-ink border-dashed">
+                            <button onclick="registerAgent()" class="btn-brutal btn-primary w-full py-4 text-base flex items-center justify-center gap-3">
+                                <i data-lucide="upload-cloud" class="w-5 h-5"></i> Execute Deployment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
     </div>
 
     <script>
@@ -172,16 +280,36 @@
         const WS_URL = "ws://localhost:8000/ws/transactions";
         let txCount = 0;
         let providers = [];
+        let storedTxs = JSON.parse(localStorage.getItem('agora_txs') || '[]');
 
         lucide.createIcons();
+
+        // Clock Update
+        setInterval(() => {
+            const d = new Date();
+            document.getElementById('clock').innerText = d.toISOString().substr(11, 8) + ' UTC';
+        }, 1000);
+
+        function clearLedger() {
+            localStorage.removeItem('agora_txs');
+            storedTxs = [];
+            txCount = 0;
+            document.getElementById('tx-feed').innerHTML = '';
+            document.getElementById('tx-count').innerText = '0';
+        }
 
         // View Switcher
         function switchView(view) {
             document.querySelectorAll('[id^="view-"]').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('[id^="nav-"]').forEach(el => el.classList.remove('nav-active'));
+            document.querySelectorAll('[id^="nav-"]').forEach(el => {
+                el.classList.remove('nav-active', 'text-agora-surface');
+                el.classList.add('text-agora-ink');
+            });
             
             document.getElementById(`view-${view}`).classList.remove('hidden');
-            document.getElementById(`nav-${view}`).classList.add('nav-active');
+            const navBtn = document.getElementById(`nav-${view}`);
+            navBtn.classList.add('nav-active');
+            navBtn.classList.remove('text-agora-ink');
             
             if (view === 'marketplace') fetchAgents();
         }
@@ -189,14 +317,14 @@
         // Marketplace Logic
         async function fetchAgents() {
             const grid = document.getElementById('marketplace-grid');
-            grid.innerHTML = '<div class="col-span-full py-20 text-center text-slate-500 italic">Scanning network for active agents...</div>';
+            grid.innerHTML = '<div class="col-span-full py-20 text-center font-mono text-sm uppercase font-bold text-agora-blueprint animate-pulse">Scanning Registry...</div>';
             
             try {
                 const resp = await fetch(`${API_URL}/services/search`);
                 providers = await resp.json();
                 renderMarketplace();
             } catch (err) {
-                grid.innerHTML = '<div class="col-span-full py-20 text-center text-red-500 italic">Network scan failed. Is the API running?</div>';
+                grid.innerHTML = '<div class="col-span-full py-20 text-center font-mono text-sm uppercase font-bold text-agora-accent">ERR: Registry Offline</div>';
             }
         }
 
@@ -205,33 +333,30 @@
             grid.innerHTML = '';
             
             if (providers.length === 0) {
-                grid.innerHTML = '<div class="col-span-full py-20 text-center text-slate-500">No agents registered on this network yet.</div>';
+                grid.innerHTML = '<div class="col-span-full py-20 text-center font-mono text-sm uppercase font-bold">0 Entities Found.</div>';
                 return;
             }
 
             providers.forEach(p => {
                 const card = document.createElement('div');
-                card.className = "glass rounded-3xl p-6 hover:border-green-500/50 transition-all group";
+                card.className = "panel p-0 flex flex-col group cursor-default";
                 card.innerHTML = `
-                    <div class="flex justify-between items-start mb-6">
-                        <div class="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center text-green-500 group-hover:bg-green-500 group-hover:text-white transition-all">
-                            <i data-lucide="cpu" class="w-6 h-6"></i>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Price</p>
-                            <p class="text-lg font-black text-white italic">${p.price.toFixed(4)} <span class="text-xs text-slate-500 not-italic uppercase font-mono">USDC</span></p>
-                        </div>
+                    <div class="bg-agora-ink text-agora-surface p-4 border-b-2 border-agora-ink flex justify-between items-center">
+                        <h3 class="font-bold uppercase tracking-tight text-lg">${p.name}</h3>
+                        <i data-lucide="cpu" class="w-5 h-5 text-agora-surface/50 group-hover:text-agora-accent transition-colors"></i>
                     </div>
-                    <h3 class="text-xl font-bold text-white mb-2">${p.name}</h3>
-                    <p class="text-sm text-slate-400 mb-6 line-clamp-2">${p.description || 'Autonomous agent offering specialized computational services.'}</p>
-                    <div class="flex items-center justify-between pt-4 border-t border-slate-800/50">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] text-slate-500 uppercase font-bold">Category</span>
-                            <span class="text-xs text-blue-400 font-bold">${p.category || 'General'}</span>
-                        </div>
-                        <div class="flex flex-col text-right">
-                            <span class="text-[10px] text-slate-500 uppercase font-bold">Reputation</span>
-                            <span class="text-xs text-green-400 font-bold">${p.reputation || '1,000'} GXP</span>
+                    <div class="p-6 flex-1 bg-agora-surface font-mono">
+                        <p class="text-xs text-agora-ink/80 mb-6 uppercase h-12 overflow-hidden">${p.description || 'GENERIC COMPUTE PROTOCOL'}</p>
+                        
+                        <div class="grid grid-cols-2 gap-4 border-t-2 border-agora-ink pt-4 mt-auto">
+                            <div>
+                                <span class="block text-[10px] text-agora-ink/50 font-bold mb-1">RATE (USDC)</span>
+                                <span class="block text-sm font-bold text-agora-ink">${p.price.toFixed(4)}</span>
+                            </div>
+                            <div class="text-right">
+                                <span class="block text-[10px] text-agora-ink/50 font-bold mb-1">REP (GXP)</span>
+                                <span class="block text-sm font-bold text-agora-blueprint">${p.reputation || '1,000'}</span>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -243,135 +368,177 @@
         // Registration Logic
         async function registerAgent() {
             const name = document.getElementById('reg-name').value;
-            const desc = document.getElementById('reg-desc').value;
-            if (!name) return alert("Agent Name is required.");
+            if (!name) return alert("ERR: IDENTIFIER REQUIRED");
 
-            alert(`Deployment Sequence Initiated: Creating wallet and registering ${name} on-chain.`);
+            alert(`[SYS.OP] DEPLOYMENT INITIATED: ${name}`);
             switchView('control');
-            addLog({ message: `🛠️ Registering ${name} with the marketplace...`, type: 'system' });
+            addLog({ message: `INITIATING DEPLOYMENT FOR ${name.toUpperCase()}...`, type: 'system' });
         }
 
-        // Mission Control Logic (Previous logic restored)
+        // Mission Control Logic
         function connectWS() {
             const ws = new WebSocket(WS_URL);
             ws.onmessage = (event) => {
                 const envelope = JSON.parse(event.data);
-                const topic = envelope.topic;
-                const data = envelope.data;
-
-                if (topic === 'transaction') addTransaction(data);
-                else if (topic === 'transaction_update') updateTransactionHash(data);
-                else if (topic === 'logs') addLog(data);
+                if (envelope.topic === 'transaction') {
+                    addTransaction(envelope.data);
+                } else if (envelope.topic === 'transaction_update') {
+                    updateTransactionHash(envelope.data);
+                } else if (envelope.topic === 'logs') {
+                    addLog(envelope.data);
+                }
             };
-            ws.onclose = () => {
-                console.log("WebSocket closed. Reconnecting...");
-                setTimeout(connectWS, 2000);
-            };
+            ws.onclose = () => setTimeout(connectWS, 2000);
         }
 
-        function addTransaction(tx) {
+        function addTransaction(tx, skipStorage=false) {
             const feed = document.getElementById('tx-feed');
             if (txCount === 0) feed.innerHTML = '';
             txCount++;
             document.getElementById('tx-count').innerText = txCount;
 
+            if (!skipStorage) {
+                storedTxs.unshift(tx);
+                if (storedTxs.length > 50) storedTxs.pop();
+                localStorage.setItem('agora_txs', JSON.stringify(storedTxs));
+            }
+
+            const isConfirmed = tx.arc_tx_hash && tx.arc_tx_hash !== "PENDING...";
+            const verifyUrl = isConfirmed ? `https://testnet.arcscan.app/tx/${tx.arc_tx_hash}` : `https://testnet.arcscan.app/address/${tx.seller_address}`;
+            const iconBg = isConfirmed ? 'bg-agora-blueprint text-white' : 'bg-agora-ink text-agora-surface';
+
             const card = document.createElement('div');
-            card.className = "tx-card glass rounded-3xl p-6 glow-green border-l-4 border-l-green-500";
+            card.className = "panel p-0 overflow-hidden mb-4";
             card.setAttribute('data-tx-id', tx.tx_id);
-            const verifyUrl = `https://testnet.arcscan.app/address/${tx.seller_address}`;
             
             card.innerHTML = `
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-400">
-                            <i data-lucide="zap" class="w-6 h-6"></i>
+                <div class="p-4 bg-agora-surface border-b-2 border-agora-ink flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 ${iconBg} rounded-none flex items-center justify-center shrink-0 icon-container">
+                            <i data-lucide="check" class="w-5 h-5"></i>
                         </div>
                         <div>
-                            <div class="flex items-center gap-2">
-                                <h3 class="font-bold text-lg text-white">${tx.service_name}</h3>
-                                <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full mono tracking-widest">${tx.tx_id}</span>
-                            </div>
-                            <p class="text-sm text-slate-400">
-                                <span class="text-blue-400 font-semibold">${tx.buyer}</span> paid 
-                                <span class="text-green-400 font-semibold">${tx.seller}</span>
-                            </p>
+                            <h3 class="font-bold uppercase text-agora-ink">${tx.service_name}</h3>
+                            <p class="font-mono text-[10px] text-agora-ink/60 mt-0.5 uppercase">ID: ${tx.tx_id}</p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-4 w-full md:w-auto">
-                        <div class="text-right hidden md:block">
-                            <p class="text-lg font-bold text-white mono">${tx.amount_usdc} USDC</p>
-                            <p class="text-[10px] text-slate-500 mono uppercase">${new Date().toLocaleTimeString()}</p>
-                        </div>
-                        <button onclick="window.open('${verifyUrl}')" class="verify-btn flex-1 md:flex-none px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2">
-                            <i data-lucide="external-link" class="w-3 h-3"></i> VIEW WALLET
-                        </button>
+                    <div class="text-right">
+                        <p class="font-mono text-sm font-bold text-agora-ink">${tx.amount_usdc} USDC</p>
                     </div>
                 </div>
-                <div class="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between">
-                   <span class="text-[10px] text-slate-500 uppercase font-bold tracking-tighter">ERC-8004 Hash</span>
-                   <span class="text-[10px] mono text-slate-400 truncate max-w-[200px] tx-hash-display">PENDING...</span>
+                
+                <div class="p-4 bg-agora-bg font-mono text-xs grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                    <div>
+                        <p class="text-agora-ink/60 mb-1">PARTICIPANTS</p>
+                        <p class="truncate"><span class="font-bold text-agora-blueprint">${tx.buyer}</span> → <span class="font-bold text-agora-accent">${tx.seller}</span></p>
+                    </div>
+                    <div class="md:text-right">
+                        <p class="text-agora-ink/60 mb-1">ON-CHAIN PROOF</p>
+                        <div class="flex items-center md:justify-end gap-2">
+                            <span class="tx-hash-display font-bold ${isConfirmed ? 'text-agora-ink' : 'text-agora-ink/40'}">${isConfirmed ? tx.arc_tx_hash.substring(0, 16) + '...' : 'PENDING...'}</span>
+                            <button onclick="window.open('${verifyUrl}')" class="verify-btn border border-agora-ink px-2 py-1 ${isConfirmed ? 'bg-agora-blueprint text-white' : 'bg-agora-surface'} hover:bg-agora-ink hover:text-agora-surface transition-colors uppercase font-bold text-[10px]">
+                                ${isConfirmed ? 'RECEIPT ↗' : 'WALLET'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             `;
-            feed.prepend(card);
+            // Reverse so they are added to the bottom if skipStorage=true to maintain chronological order from cache? 
+            // Actually, we store them as newest first (unshift). So if we load them, we should just append them normally or prepend.
+            // If we loop through storedTxs (newest first) and prepend, the oldest will end up at top.
+            // Better to append them to the feed so they render in the exact order they are in the array.
+            if (skipStorage) {
+                feed.appendChild(card);
+            } else {
+                feed.prepend(card);
+            }
             lucide.createIcons();
         }
 
         function updateTransactionHash(update) {
+            const idx = storedTxs.findIndex(t => t.tx_id === update.tx_id);
+            if (idx !== -1) {
+                storedTxs[idx].arc_tx_hash = update.arc_tx_hash;
+                localStorage.setItem('agora_txs', JSON.stringify(storedTxs));
+            }
+
             const card = document.querySelector(`[data-tx-id="${update.tx_id}"]`);
             if (card) {
                 const btn = card.querySelector('.verify-btn');
                 const hashDisplay = card.querySelector('.tx-hash-display');
+                
                 btn.onclick = () => window.open(`https://testnet.arcscan.app/tx/${update.arc_tx_hash}`);
-                btn.innerHTML = `<i data-lucide="external-link" class="w-3 h-3"></i> VERIFIED`;
-                btn.className = "verify-btn flex-1 md:flex-none px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 glow-blue";
-                hashDisplay.innerText = update.arc_tx_hash;
-                hashDisplay.className = "text-[10px] mono text-blue-400 font-bold truncate max-w-[200px] tx-hash-display";
-                card.className = "tx-card glass rounded-3xl p-6 glow-blue border-l-4 border-l-blue-500";
-                lucide.createIcons();
+                btn.innerHTML = `RECEIPT ↗`;
+                btn.className = "verify-btn border border-agora-ink px-2 py-1 bg-agora-blueprint text-white hover:bg-agora-ink transition-colors uppercase font-bold text-[10px]";
+                
+                hashDisplay.innerText = update.arc_tx_hash.substring(0, 16) + '...';
+                hashDisplay.className = "tx-hash-display font-bold text-agora-ink";
+                
+                const iconContainer = card.querySelector('.icon-container');
+                if (iconContainer) {
+                    iconContainer.className = "icon-container w-8 h-8 bg-agora-blueprint rounded-none flex items-center justify-center text-white shrink-0";
+                }
             }
         }
 
         function addLog(log) {
             const container = document.getElementById('log-container');
             const entry = document.createElement('div');
-            entry.className = "flex gap-3 animate-in slide-in-from-left-2 duration-300";
-            let colorClass = "text-slate-400";
-            if (log.type === 'decision') colorClass = "text-blue-400";
-            if (log.type === 'payment') colorClass = "text-green-400";
-            if (log.type === 'system') colorClass = "text-yellow-500 italic";
-            entry.innerHTML = `<span class="text-slate-600 shrink-0">[${new Date().toLocaleTimeString([], {hour12:false})}]</span><span class="${colorClass}">${log.message}</span>`;
+            entry.className = "log-entry flex gap-4 hover:bg-black/5 transition-colors";
+            
+            let prefix = "SYS ";
+            let colorClass = "text-agora-ink/70";
+            
+            if (log.type === 'decision') {
+                prefix = "AI  ";
+                colorClass = "text-agora-blueprint font-bold";
+            } else if (log.type === 'payment') {
+                prefix = "PAY ";
+                colorClass = "text-agora-accent font-bold";
+            }
+            
+            entry.innerHTML = `
+                <span class="text-agora-ink/40 shrink-0 w-16">${new Date().toLocaleTimeString([], {hour12:false})}</span>
+                <span class="text-agora-ink font-bold shrink-0">${prefix}</span>
+                <span class="${colorClass} break-words">${log.message}</span>
+            `;
             container.appendChild(entry);
             container.scrollTop = container.scrollHeight;
         }
 
         async function runDemoAction(type) {
-            const btn = document.getElementById(`${type}-btn`) || event.target;
+            const btn = document.getElementById(`${type}-btn`) || document.getElementById('stress-btn') || event.target;
             const originalHtml = btn.innerHTML;
             const statusLabel = document.getElementById('system-status');
             
-            btn.innerHTML = '<span class="animate-spin mr-2">⚙️</span> PROCESSING...';
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> EXEC...';
             btn.disabled = true;
-            statusLabel.innerText = 'Active';
+            statusLabel.innerText = 'EXEC';
+            lucide.createIcons();
 
-            const msg = type === 'setup' ? "🛠️ Initializing Agora Economy..." : 
-                        type === 'single' ? "🎯 Tasking Agent: 'Summarize financial report...'" :
-                        "🔥 Initiating 50-Transaction Frenzy...";
+            const msg = type === 'setup' ? "BOOTSTRAPPING CORE ECONOMY PROTOCOLS..." : 
+                        type === 'single' ? "DISPATCHING SINGLE AGENT MISSION..." :
+                        "INITIATING MAXIMUM STRESS TEST OVERLOAD...";
             addLog({ message: msg, type: 'system' });
             
             try {
                 const resp = await fetch(`${API_URL}/demo/${type}`, { method: 'POST' });
                 const data = await resp.json();
-                addLog({ message: `🚀 Success: ${data.message}`, type: 'system' });
-                statusLabel.innerText = 'Success';
+                addLog({ message: `SUCCESS: ${data.message.toUpperCase()}`, type: 'system' });
+                statusLabel.innerText = 'OK';
             } catch (e) {
-                addLog({ message: `❌ Connection error during ${type}.`, type: 'system' });
-                statusLabel.innerText = 'Error';
+                addLog({ message: `FATAL: CONNECTION DROPPED DURING ${type.toUpperCase()}`, type: 'system' });
+                statusLabel.innerText = 'ERR';
             } finally {
                 btn.innerHTML = originalHtml;
                 btn.disabled = false;
-                setTimeout(() => { if(statusLabel.innerText !== 'Active') statusLabel.innerText = 'Idle'; }, 3000);
+                lucide.createIcons();
+                setTimeout(() => { if(statusLabel.innerText !== 'EXEC') statusLabel.innerText = 'IDLE'; }, 3000);
             }
         }
+
+        // Initialize stored transactions on load
+        storedTxs.forEach(tx => addTransaction(tx, true));
 
         connectWS();
     </script>
