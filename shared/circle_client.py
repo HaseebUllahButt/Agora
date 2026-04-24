@@ -10,9 +10,7 @@ from typing import Optional
 import logging
 import base64
 import binascii
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
-from Crypto.Hash import SHA256
+from circle.web3 import utils as circle_utils
 
 logger = logging.getLogger(__name__)
 
@@ -54,29 +52,16 @@ class CircleClient:
     
     def _get_entity_secret_ciphertext(self) -> str:
         """
-        Encrypt the entity secret using Circle's public key.
-        Required for state-changing API calls.
+        Encrypt the entity secret using the official Circle SDK utility.
+        The SDK internally handles the public key fetch.
         """
         try:
-            # 1. Fetch the Public Key from Circle
-            url = f"{CIRCLE_API_URL}/w3s/config/entity/publicKey"
-            response = self.config.client.get(url)
-            if response.status_code != 200:
-                raise Exception(f"Failed to fetch Circle public key: {response.text}")
-            
-            public_key_pem = response.json()["data"]["publicKey"]
-            
-            # 2. Encrypt the entity secret
-            # The entity secret is 32 bytes (64 hex characters)
-            entity_secret_bytes = binascii.unhexlify(self.config.entity_secret)
-            
-            pub_key = RSA.importKey(public_key_pem)
-            cipher = PKCS1_OAEP.new(pub_key, hashAlgo=SHA256)
-            ciphertext = cipher.encrypt(entity_secret_bytes)
-            
-            return base64.b64encode(ciphertext).decode("utf-8")
+            return circle_utils.generate_entity_secret_ciphertext(
+                self.config.api_key,
+                self.config.entity_secret
+            )
         except Exception as e:
-            logger.error(f"Failed to generate entitySecretCiphertext: {e}")
+            logger.error(f"Failed to generate entitySecretCiphertext via SDK: {e}")
             raise
 
     def create_wallet_set(self, name: str) -> str:
