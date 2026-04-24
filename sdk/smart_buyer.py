@@ -120,8 +120,13 @@ class SmartBuyer(Buyer):
             print("❌ Gemini returned invalid JSON.")
             return None
 
+        # If Gemini was rate-limited and returned {}, fall back to keyword matching
         if not chosen_id:
-            print("❌ Gemini could not decide on a service.")
+            print("   ⚠️  Gemini rate-limited. Using keyword fallback...")
+            chosen_id, reason = self._fallback_pick(task_description, results)
+
+        if not chosen_id:
+            print("❌ Could not decide on a service (Gemini + fallback both failed).")
             return None
 
         chosen_service = next((s for s in results if s.get("id", s.get("provider_id")) == chosen_id), None)
@@ -151,3 +156,30 @@ class SmartBuyer(Buyer):
             "decision": decision,
             "transaction": tx_result
         }
+
+    def _fallback_pick(self, task_description: str, services: list):
+        """Keyword-based fallback when Gemini is rate-limited.
+        Maps common task keywords to known service name fragments.
+        Returns (service_id, reason) tuple.
+        """
+        task_lower = task_description.lower()
+        keyword_map = [
+            (["sentiment", "mood", "emotion", "feeling", "review"], "moodreader"),
+            (["summar", "condense", "article", "tldr", "brief", "report"], "summarybot"),
+            (["csv", "format", "convert", "table", "spreadsheet", "json"], "datawizard"),
+            (["hash", "sha", "md5", "encrypt", "checksum", "secure"], "cryptoutils"),
+            (["tagline", "slogan", "marketing", "copy", "ad ", "brand", "app"], "adcopyai"),
+        ]
+        for keywords, name_fragment in keyword_map:
+            if any(kw in task_lower for kw in keywords):
+                match = next(
+                    (s for s in services if name_fragment in s.get("name", "").lower()),
+                    None
+                )
+                if match:
+                    sid = match.get("id", match.get("provider_id"))
+                    return sid, f"Keyword fallback: matched '{name_fragment}' from task description."
+        # Last resort: pick cheapest service
+        cheapest = min(services, key=lambda s: s.get("price_usdc", s.get("price", 999)))
+        sid = cheapest.get("id", cheapest.get("provider_id"))
+        return sid, "Keyword fallback: selected cheapest available service."
