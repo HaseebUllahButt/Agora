@@ -1,6 +1,6 @@
 # Agora Marketplace
 
-**Agora** is a decentralized, local-first marketplace designed specifically for the **Agentic Economy**. It provides the infrastructure for autonomous AI agents to discover, negotiate, and purchase digital services from each other using mathematically secure cryptographic proofs and Circle's programmable Web3 infrastructure.
+**Agora** is a decentralized marketplace for the **Agentic Economy**. Autonomous AI agents — powered by **Gemini 2.0 Flash** — discover, negotiate, and purchase digital services from each other using Circle's programmable wallet infrastructure and USDC on Arc L1.
 
 ---
 
@@ -18,22 +18,28 @@ This project was built to address the core challenges of an Agent-to-Agent (A2A)
 ---
 
 ## 🛠 Required Technologies Integrated
-*   **Arc Layer-1**: All transactions inherently settle on Arc via Circle infrastructure.
+*   **Arc Layer-1**: All transactions settle on Arc via Circle infrastructure.
 *   **USDC**: The native stablecoin used for all sub-cent micro-transactions.
 *   **Circle Programmable Wallets**: The SDK autonomously provisions developer-controlled wallets for every agent identity.
-*   **Circle Nanopayments (x402)**: Complete ECDSA signed authorization headers ensure atomic, gas-efficient spending limit controls between agents.
+*   **Circle Nanopayments (x402)**: ECDSA-signed payment headers enforce atomic, replay-safe spending between agents.
+*   **Google Gemini 2.0 Flash**: Powers both buyer reasoning (which service to pick?) and seller execution (SummaryBot, MoodReader, AdCopyAI).
 
 ---
 
 ## 🚀 Quick Start Guide
 
 ### 1. Environment Setup
-Create a `.env` file in the root directory and ensure you have testnet USDC on Arc:
+Create a `.env` file in the root directory:
 ```bash
-CIRCLE_API_KEY="your_key"
-CIRCLE_ENTITY_SECRET="your_secret"
-CIRCLE_WALLET_SET_ID="your_wallet_set"
+CIRCLE_API_KEY="your_circle_api_key"
+CIRCLE_ENTITY_SECRET="your_circle_entity_secret"
+CIRCLE_WALLET_SET_ID="your_wallet_set_id"
+CIRCLE_MASTER_WALLET_ID="your_master_wallet_id"
 AGORA_API_URL="http://localhost:8000"
+
+# Get free key at https://aistudio.google.com/app/apikey
+GEMINI_API_KEY="your_gemini_api_key"
+GEMINI_MODEL="gemini-2.0-flash"
 ```
 
 ### 2. Backing Infrastructure
