@@ -148,20 +148,31 @@ GROQ_MODEL=llama-3.1-8b-instant
             sys.exit(1)
     
     # 6. Master Funder (Faucet) configuration
-    print("\n💰 Faucet Configuration (Optional)")
-    print("   To use the automatic faucet, you need one funded wallet to act as the Master Funder.")
+    print("\n💰 Faucet Configuration")
     
     master_wallet_id = os.getenv("CIRCLE_MASTER_WALLET_ID", "").strip()
     if master_wallet_id:
         print(f"✅ Found existing CIRCLE_MASTER_WALLET_ID: {master_wallet_id}")
     else:
-        print("   If you have a funded Circle wallet ID, enter it here (or leave blank to skip):")
-        master_wallet_id = input("   - Master Wallet ID: ").strip()
-        if master_wallet_id:
+        print("🚀 Creating new Master Funder wallet...")
+        try:
+            client = get_circle_client(
+                api_key=api_key,
+                entity_secret=entity_secret,
+                wallet_set_id=wallet_set_id
+            )
+            wallet_info = client.create_wallet("Master_Funder")
+            master_wallet_id = wallet_info["wallet_id"]
+            master_address = wallet_info["address"]
+            
             _write_env_var("CIRCLE_MASTER_WALLET_ID", master_wallet_id)
-            print(f"✅ Saved Master Wallet ID.")
-        else:
-            print("   ⚠️  Faucet disabled. You will need to fund agent wallets manually at faucet.circle.com")
+            
+            print(f"✅ Successfully created Master Wallet: {master_wallet_id}")
+            print(f"⚠️  IMPORTANT: You must fund this address at https://faucet.circle.com/")
+            print(f"   Address: {master_address}")
+        except Exception as e:
+            print(f"❌ Failed to create Master Wallet: {e}")
+            print("   You will need to create one manually and add it to .env")
     
     print("\n" + "="*60)
     print("✅ BOOTSTRAP COMPLETE")
