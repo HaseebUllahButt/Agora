@@ -115,6 +115,7 @@ class Agent:
         
         data[self.id] = {
             "name": self.name,
+            "role": getattr(self, "role", "agent"),
             "address": self.address,
             "private_key": self.private_key,
             "circle_wallet_id": self.circle_wallet_id,
