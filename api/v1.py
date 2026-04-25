@@ -39,18 +39,17 @@ from dotenv import load_dotenv
 # Load environment before anything else
 load_dotenv()
 
-from shared.database import (
+from shared.core import (
     init_database, create_agent, register_provider, get_all_providers,
     search_providers, record_transaction, update_transaction_status,
     update_agent_reputation, get_agent, get_transaction_history,
     record_service_result
 )
-from shared.ecdsa_signing import validate_x402_header
-from shared.nonce_registry import register_nonce
-from shared.arc_client import has_sufficient_balance
-from shared.event_bus import get_event_bus
-from shared.search_engine import get_search_engine
-from shared.circle_client import CircleClient, CircleWalletConfig
+from shared.core import validate_x402_header
+from shared.core import register_nonce
+from shared.core import get_event_bus
+from shared.core import get_search_engine
+from shared.core import CircleClient, CircleWalletConfig
 from sdk.provider import get_service_registry, call_service
 
 # Initialize Circle infrastructure for server-side settlement
@@ -159,7 +158,7 @@ def register_agent(req: RegisterAgentRequest):
 @app.get("/agents")
 def list_agents():
     """List all registered agents."""
-    from shared.database import get_db
+    from shared.core import get_db
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, address, reputation_score FROM agents WHERE 1")
@@ -178,7 +177,7 @@ def list_agents():
 @app.delete("/agents/{agent_id}")
 def unregister_agent(agent_id: str):
     """Remove an agent and their services from the marketplace."""
-    from shared.database import get_db
+    from shared.core import get_db
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM providers WHERE agent_id = ?", (agent_id,))
@@ -252,7 +251,7 @@ def register_service(agent_id: str, req: RegisterServiceRequest):
 @app.get("/agents/{agent_id}/services")
 def list_agent_services(agent_id: str):
     """List all services offered by an agent."""
-    from shared.database import get_db
+    from shared.core import get_db
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -511,17 +510,6 @@ async def poll_tx_hash(tx_id: str, circle_tx_id: str):
     logger.warning(f"❌ TIMEOUT: Could not find hash for {tx_id} after {max_attempts} attempts.")
 
 
-@app.post("/purchase")
-async def purchase_service(req: PurchaseServiceRequest, background_tasks: BackgroundTasks):
-    """
-    Buy a service with cryptographic proof of payment.
-    - Settle via Circle (on-chain)
-    - Execute Python function
-    - Return result + proof
-    """
-
-
-
 @app.get("/transactions")
 def list_transactions():
     """Get transaction history."""
@@ -546,13 +534,17 @@ def list_transactions():
 @app.post("/demo/setup")
 async def run_demo_setup(background_tasks: BackgroundTasks):
     """Bootstrap the economy from the dashboard."""
-    from scripts.setup_demo_economy import setup_economy
+    from sdk.core import bootstrap
     event_bus = get_event_bus()
     
     def log_callback(msg):
         event_bus.publish("logs", {"message": msg, "type": "setup", "timestamp": datetime.utcnow().isoformat()})
     
-    background_tasks.add_task(setup_economy, callback=log_callback)
+    def setup_task():
+        bootstrap()
+        log_callback("✅ Economy Setup Complete!")
+    
+    background_tasks.add_task(setup_task)
     return {"status": "Setup started", "message": "Check the live console for progress."}
 
 

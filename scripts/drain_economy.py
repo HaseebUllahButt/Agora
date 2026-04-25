@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sdk.agent import Agent, CONFIG_FILE
-from shared.circle_client import get_circle_client
+from shared.core import get_circle_client
 
 def drain_economy():
     load_dotenv()

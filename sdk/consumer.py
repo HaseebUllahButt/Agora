@@ -24,14 +24,14 @@ from typing import List, Dict, Optional, Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from shared.ecdsa_signing import sign_x402_header
-from shared.database import (
+from shared.core import sign_x402_header
+from shared.core import (
     search_providers, get_all_providers, record_transaction,
     update_transaction_status, update_agent_reputation, get_agent,
     get_db
 )
 from sdk.exceptions import BudgetExceeded
-from shared.circle_client import CircleClient, CircleWalletConfig
+from shared.core import CircleClient, CircleWalletConfig
 
 logger = logging.getLogger(__name__)
 

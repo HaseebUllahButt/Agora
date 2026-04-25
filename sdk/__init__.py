@@ -43,14 +43,21 @@ Usage:
 from .provider import pay_for, get_service_registry
 from .consumer import AgoraClient
 from .agent import Agent
+from .buyer import Buyer
+from .seller import Seller
+from .core import bootstrap, wait_for_funding
 from .exceptions import BudgetExceeded
 from .wallet import generate_wallet, get_address_from_private_key, WalletConfig
 
 __all__ = [
+    "bootstrap",
+    "wait_for_funding",
     "pay_for",
     "get_service_registry",
     "AgoraClient",
     "Agent",
+    "Buyer",
+    "Seller",
     "BudgetExceeded",
     "generate_wallet",
     "get_address_from_private_key",

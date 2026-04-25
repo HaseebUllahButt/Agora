@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from sdk.consumer import AgoraClient
 from sdk.exceptions import BudgetExceeded
 from sdk.wallet import get_address_from_private_key
-from shared.circle_client import CircleClient, CircleWalletConfig
+from shared.core import CircleClient, CircleWalletConfig
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class Agent:
         
         # Ensure we have a valid keypair for signing
         if not self.private_key:
-            from shared.ecdsa_signing import generate_keypair
+            from shared.core import generate_keypair
             keys = generate_keypair()
             self.private_key = keys["private_key_hex"]
             self.address = keys["address"]
@@ -148,7 +148,7 @@ class Agent:
         self._save_config()
         return self.circle_address
 
-    def fund(self, amount_usdc: float = 0.5) -> Dict:
+    def fund(self, amount_usdc: float = 0.5, wait_for_settlement: bool = True) -> Dict:
         """
         Request funds from the Master Funder wallet (if configured).
         This allows agents to bootstrap their budget automatically.
@@ -184,6 +184,17 @@ class Agent:
                 to_address=self.circle_address,
                 amount_usdc=amount_needed
             )
+            
+            if wait_for_settlement and "transaction_id" in tx:
+                import time
+                logger.info("⏳ Waiting for funding to settle on-chain...")
+                for _ in range(20):
+                    status = self.circle_client.get_transaction_status(tx["transaction_id"])
+                    if status.get("state") == "COMPLETE":
+                        logger.info("✅ Funding settled!")
+                        break
+                    time.sleep(2)
+                    
             return tx
         except Exception as e:
             logger.error(f"Faucet transfer failed: {e}")
@@ -193,7 +204,7 @@ class Agent:
     def bootstrap_system(cls):
         """Global initialization: Preps .env with Circle secrets and Wallet Set."""
         import secrets
-        from shared.circle_client import CircleWalletConfig, CircleClient
+        from shared.core import CircleWalletConfig, CircleClient
         
         load_dotenv()
         env_path = Path(".env")
@@ -359,14 +370,15 @@ class Agent:
             raise ValueError("No wallet found to withdraw from.")
         
         balance = self.circle_client.get_balance(self.circle_wallet_id)
-        if balance <= 0:
+        if balance <= 0.01:
             return {"error": "No balance to withdraw", "amount": 0}
         
-        logger.info(f"Sweeping {balance} USDC from {self.id} to {to_address}...")
+        sweep_amount = round(balance - 0.01, 6)
+        logger.info(f"Sweeping {sweep_amount} USDC from {self.id} to {to_address}...")
         tx = self.circle_client.transfer_usdc(
             from_wallet_id=self.circle_wallet_id,
             to_address=to_address,
-            amount_usdc=balance
+            amount_usdc=sweep_amount
         )
         return tx
 
