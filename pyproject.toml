@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agora-x402"
+version = "0.1.0"
+description = "Standalone agent applications that pay each other per API call via the x402 protocol."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AgoraAli" }]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",
+    "pydantic>=2.9",
+    "python-dotenv>=1.0",
+    "eth-keys>=0.5",
+    "eth-utils>=5.0",
+    "eth-hash[pycryptodome]>=0.7",
+    "click>=8.1",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+circle = ["circle-developer-controlled-wallets>=2.0.0"]
+
+[project.scripts]
+agora-agent = "agora_x402.cli:main"
+agora-facilitator = "facilitator.api:run"
+
+[tool.setuptools]
+packages = ["agora_x402", "facilitator"]

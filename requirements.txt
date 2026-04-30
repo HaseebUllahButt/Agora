@@ -1,14 +1,13 @@
-fastapi
-uvicorn
-pydantic
-python-dotenv
-redis
-eth-keys
-eth-utils
-httpx
-pycryptodome
-requests
-websockets
-scikit-learn
-numpy
-circle-developer-controlled-wallets
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+httpx==0.27.2
+pydantic==2.9.2
+python-dotenv==1.0.1
+eth-keys==0.5.1
+eth-utils==5.0.0
+eth-hash[pycryptodome]==0.7.0
+click==8.1.7
+rich==13.8.1
+# Optional — only needed if you run scripts/bootstrap_circle.py to use real
+# Circle Programmable Wallets instead of the default mock settlement.
+circle-developer-controlled-wallets>=2.0.0
